@@ -1,4 +1,3 @@
-#%matplotlib inline
 import matplotlib.pyplot as plt
 import bb_backend.api
 from bb_backend.api import FramePlotter, VideoPlotter
@@ -6,11 +5,13 @@ from typing import List
 import matplotlib.pyplot as plt
 from scipy.ndimage.interpolation import rotate
 from numpy import ndarray
+import math
+from tqdm import tqdm
 
 final_size = 128
 size_before_rotation = math.ceil(final_size * math.sqrt(2))
 
-def get_crop_coordinates(event: Event, frame_index: int, size : int = size_before_rotation):
+def get_crop_coordinates(event: 'Event', frame_index: int, size : int = size_before_rotation):
     x1 = int(event.df.x1.values[frame_index])
     y1 = int(event.df.y1.values[frame_index])
     x2 = int(event.df.x2.values[frame_index])
@@ -20,16 +21,16 @@ def get_crop_coordinates(event: Event, frame_index: int, size : int = size_befor
     return xc - size/2, yc - size/2, xc + size/2 -1, yc + size/2 -1
 
 
-def get_frame_plotter(event: Event, frame_index: int) -> FramePlotter:
+def get_frame_plotter(event: 'Event', frame_index: int) -> FramePlotter:
     return FramePlotter(frame_id=list(event.frame_ids)[frame_index], scale=1.0, 
                         crop_coordinates=get_crop_coordinates(event=event, frame_index=frame_index))
     
     
-def get_center_frame_index(event: Event) -> int:
+def get_center_frame_index(event: 'Event') -> int:
     return int(event.begin_frame_idx + (event.end_frame_idx - event.begin_frame_idx)/2)
     
     
-def get_videos_around_center(events: List[Event]):
+def get_videos_around_center(events: List['Event']):
     i = 0
     for event in tqdm(events):
         # print("start fp")
@@ -48,16 +49,25 @@ def get_videos_around_center(events: List[Event]):
         i+=1
         
         
-def get_center_frame_image(event: Event):
+def get_center_frame_image(event: 'Event'):
     fp = get_frame_plotter(event=event, frame_index=get_center_frame_index(event))
     return fp.get_image()
+
+
+def get_all_images(event: 'Event'): 
+    images = []
+    ids = list(event.frame_ids)
+    for i in tqdm(range(len(ids)//2)):
+        fp = get_frame_plotter(event=event, frame_index=i)
+        images.append(fp.get_image())
+    return images
     
 
-def first_bee_rotation(event: Event, frame_index: int) -> float:
+def first_bee_rotation(event: 'Event', frame_index: int) -> float:
     return float(event.df.orient1.values[frame_index])
     
 
-def rotate_image(image: ndarray, event: Event, frame_index: int) -> ndarray:
+def rotate_image(image: ndarray, event: 'Event', frame_index: int) -> ndarray:
     """rotates the image around the center to show bee one at the bottom looking north"""
     return rotate(input=image, 
                   angle=math.degrees(first_bee_rotation(event=event, frame_index=frame_index)), 
@@ -66,21 +76,4 @@ def rotate_image(image: ndarray, event: Event, frame_index: int) -> ndarray:
 def crop_image(image: ndarray) -> ndarray:
     d = (size_before_rotation - final_size) // 2
     return image[d:d+final_size,d:d+final_size]
-
         
-event = verified_events[0]
-for i in range(10):
-    event = verified_events[i]
-    img = get_center_frame_image(event)
-    f,axes = plt.subplots(1,2, sharex=True, sharey=True)
-    axes[0].imshow(img)
-    axes[1].imshow(rotate_image(img,event,get_center_frame_index(event)))
-    plt.tight_layout()
-    plt.show()
-    
-    f,axes = plt.subplots(1,1, sharex=True, sharey=True)
-    c = crop_image(rotate_image(img,event,get_center_frame_index(event)))
-    plt.imshow(c)
-
-    plt.show()
-

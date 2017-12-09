@@ -77,8 +77,6 @@ gt_data = pandas.read_csv(StringIO(raw_data), index_col=0)
 gt_data = gt_data[gt_data.human_decidable_interaction == "y"]
 
 # Parse event metadata from table.
-
-
 class Event(object):
     track_ids = (None, None)
     detection_ids = (None, None)
@@ -103,7 +101,6 @@ class Event(object):
     def frame_ids(self):
         for detection_id in itertools.chain(*self.detection_ids):
             yield int(detection_id[1:].split("d")[0])
-
 
 gt_events = []
 for i in tqdm(range(gt_data.shape[0])):
@@ -217,53 +214,14 @@ for event in tqdm(gt_events):
     event.df.columns = list(abee.columns) + list(bbee.columns)
     assert len(ts_set) == 0
 
-# Create some path-based features for every timestamp.
-windows = [np.kaiser(x, 16.0) for x in (4, 16, 32)]
-windows = [w / w.sum() for w in windows]
+event_df = pandas.concat([event.df for event in gt_events], axis=0, ignore_index=True)
 
 for event in tqdm(gt_events):
-    event.df["distance"] = np.sqrt((event.df.x1 - event.df.x2)**2 + (event.df.y1 - event.df.y2)**2)
-    event.df["trophallaxis"] = False
-    if not np.isnan(event.begin_frame_idx) and not np.isnan(event.end_frame_idx):
-        event.df.trophallaxis.iloc[int(event.begin_frame_idx):(
-            int(event.end_frame_idx) + 1)] = True
+    event.df["trophallaxis_observed"] = event.trophallaxis_observed
+        
+verified_events = list(filter(lambda x: x.trophallaxis_observed == True, gt_events))
 
-    p1 = np.array((event.df.x1.values, event.df.y1.values), dtype=np.float32)
-    p2 = np.array((event.df.x2.values, event.df.y2.values), dtype=np.float32)
-    orient1, orient2 = event.df.orient1.values, event.df.orient2.values
-    rot1 = np.array((np.cos(orient1), np.sin(orient1)))
-    rot2 = np.array((np.cos(orient2), np.sin(orient2)))
+verified = gt_data[gt_data.trophallaxis_observed == 'y']
+durations = verified['trophallaxis_end_frame_nr'] - verified['trophallaxis_start_frame_nr'] + 1
 
-    rot1 /= np.linalg.norm(rot1, axis=0)
-    rot2 /= np.linalg.norm(rot2, axis=0)
-    p1to2 = p2 - p1
-    p1to2 /= np.linalg.norm(p1to2, axis=0)
-    p2to1 = p1 - p2
-    p2to1 /= np.linalg.norm(p2to1, axis=0)
-    # batched dot product
-    d1, d2 = np.einsum("...j,...j->...", p1to2.T,
-                       rot1.T), np.einsum("...j,...j->...", p2to1.T, rot2.T)
-    event.df["relrot_max"] = np.max(np.array((d1, d2)), axis=0)
-    event.df["relrot_min"] = np.min(np.array((d1, d2)), axis=0)
-
-    for feature in ("relrot_max", "relrot_min", "distance"):
-        for wi, w in enumerate(windows):
-            event.df["{}_{}".format(feature, wi)] = scipy.signal.convolve(
-                event.df[feature].values, w, mode='same')
-
-
-# Convert features / targets into typical X, y format.
-event_df = pandas.concat([event.df for event in gt_events], axis=0, ignore_index=True)
-feature_df = event_df.drop(["x1",
-                            "x2",
-                            "y1",
-                            "y2",
-                            "timestamp1",
-                            "timestamp2",
-                            "orient1",
-                            "orient2"],
-                           axis=1)
-display(feature_df.columns)
-fX = feature_df.drop(["trophallaxis"], axis=1).values
-fY = feature_df.trophallaxis.astype(np.float32).values
-fX.shape, fY.shape
+print("done")
