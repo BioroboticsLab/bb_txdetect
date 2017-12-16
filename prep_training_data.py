@@ -70,10 +70,7 @@ def relative_rotation(a, z_rot_a, b):
 db = psycopg2.connect(
     "dbname='beesbook' user='reader' host='localhost' password='reader'")
 
-gt_data_url = 'https://docs.google.com/spreadsheet/ccc?key=1XfezoGQK77DvKVvHwK6QDlsfbfcEiy8GjS3BLFn7UEw&output=csv'
-raw_data = requests.get(gt_data_url).content.decode('Utf-8')
-gt_data = pandas.read_csv(StringIO(raw_data), index_col=0)
-
+gt_data = pandas.read_csv('ground_truth_concat.csv', index_col=0)
 gt_data = gt_data[gt_data.human_decidable_interaction == "y"]
 
 # Parse event metadata from table.
@@ -96,10 +93,10 @@ class Event(object):
         self.end_frame_idx = row.trophallaxis_end_frame_nr
         self.trophallaxis_observed = row.trophallaxis_observed == 'y'
 
-		# TODO shouldn't duplicates get filtered out here?
     @property
     def frame_ids(self):
-        for detection_id in itertools.chain(*self.detection_ids):
+		# both bees have always the same frame_ids
+        for detection_id in self.detection_ids[0]:
             yield int(detection_id[1:].split("d")[0])
 
 gt_events = []

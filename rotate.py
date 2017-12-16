@@ -11,6 +11,7 @@ from tqdm import tqdm
 final_size = 128
 size_before_rotation = math.ceil(final_size * math.sqrt(2))
 
+
 def get_crop_coordinates(event: 'Event', frame_index: int, size : int = size_before_rotation):
     x1 = int(event.df.x1.values[frame_index])
     y1 = int(event.df.y1.values[frame_index])
@@ -57,7 +58,7 @@ def get_center_frame_image(event: 'Event'):
 def get_all_images(event: 'Event'): 
     images = []
     ids = list(event.frame_ids)
-    for i in tqdm(range(len(ids)//2)):
+    for i in tqdm(range(len(ids))):
         fp = get_frame_plotter(event=event, frame_index=i)
         images.append(fp.get_image())
     return images
@@ -73,7 +74,8 @@ def rotate_image(image: ndarray, event: 'Event', frame_index: int) -> ndarray:
                   angle=math.degrees(first_bee_rotation(event=event, frame_index=frame_index)), 
                   reshape=False)
 
+
 def crop_image(image: ndarray) -> ndarray:
     d = (size_before_rotation - final_size) // 2
     return image[d:d+final_size,d:d+final_size]
-        
+ 
