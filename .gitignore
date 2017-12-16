@@ -1,3 +1,4 @@
+*.ipynb
 *.mp4
 .ipynb_checkpoints/
 *.png
