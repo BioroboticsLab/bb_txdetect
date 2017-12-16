@@ -68,8 +68,7 @@ def first_bee_rotation(event: 'Event', frame_index: int) -> float:
     return float(event.df.orient1.values[frame_index])
     
 
-def rotate_image(image: ndarray, event: 'Event', frame_index: int) -> ndarray:
-    """rotates the image around the center to show bee one at the bottom looking north"""
+def rotate_image(image: ndarray, event: 'Event', frame_index: int) -> ndarray: """rotates the image around the center to show bee one at the bottom looking north"""
     return rotate(input=image, 
                   angle=math.degrees(first_bee_rotation(event=event, frame_index=frame_index)), 
                   reshape=False)
@@ -79,7 +78,4 @@ def crop_image(image: ndarray) -> ndarray:
     d = (SIZE_BEFORE_ROTATION - FINAL_SIZE) // 2
     return image[d:d+FINAL_SIZE,d:d+FINAL_SIZE]
  
-
-def get_bee_id():
-    query = "select bee_id from bb_detections where frame_id = 9704305047671230781 and detection_idx = 73;"
 

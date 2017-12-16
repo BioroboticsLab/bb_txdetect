@@ -1,46 +1,18 @@
 import numpy as np
-import matplotlib.pyplot as plt
-#from mpl_toolkits.mplot3d import Axes3D
-import matplotlib
-import scipy
-import scipy.signal
-import time
-import datetime
-import csv
-import pandas
-import copy
-import pickle
+import pandas as pd
 import json
-import math
-
-from IPython.display import display, HTML
-
-from sklearn.externals import joblib
-from sklearn.pipeline import make_pipeline, make_union
-import sklearn.linear_model
-import sklearn.dummy
-import sklearn.metrics
-import sklearn.ensemble
-import sklearn.calibration
-import sklearn.decomposition
-#import xgboost
-import sklearn.preprocessing
-import sklearn.model_selection
-#from tqdm import tqdm_notebook
 from tqdm import tqdm
 import seaborn as sns
 import psycopg2
-from io import StringIO
-import requests
-import itertools
-
 import bb_binary
-import bb_binary.repository
+from psycopg2.extensions import connection
 
+from typing import List, Dict
 
 class Event(object):
     track_ids = (None, None)
     detection_ids = (None, None)
+    bee_ids = (None, None)
     begin_frame_idx, end_frame_idx = np.NaN, np.NaN
     trophallaxis_observed = False
 
@@ -64,7 +36,7 @@ class Event(object):
             yield int(detection_id[1:].split("d")[0])
 
 
-def setSnsStyle(style):
+def setSnsStyle(style: str):
     # set to 'ticks', to not have lines in the images
     sns.set(style=style, font_scale=1.5)
     font = {'family': 'serif',
@@ -83,7 +55,7 @@ def connect():
 
 
 def load_gt_data():
-    gt_data = pandas.read_csv('csv/ground_truth_concat.csv', index_col=0)
+    gt_data = pd.read_csv('csv/ground_truth_concat.csv', index_col=0)
     gt_data = gt_data[gt_data.human_decidable_interaction == "y"]
 
     gt_events = []
@@ -115,7 +87,7 @@ def get_frame_container_info_for_frames(database, frame_ids):
     for ID, fc_id, fc_path, video_name in cur:
         for frame_id in frame_container_to_frames[ID]:
             frame_to_fc_map.append((frame_id, fc_id, fc_path, video_name))
-    frame_fc_map = pandas.DataFrame(frame_to_fc_map,
+    frame_fc_map = pd.DataFrame(frame_to_fc_map,
                                     columns=("frame_id", "fc_id", "fc_path", "video_name"))
     return frame_fc_map
 
@@ -136,7 +108,7 @@ def get_all_frame_ids(gt_events):
     return all_frame_ids
 
 
-def get_frame_to_fc_path_dict(frame_fc_map : 'Dataframe') -> 'Dict':
+def get_frame_to_fc_path_dict(frame_fc_map : pd.DataFrame) -> Dict:
     fc_files = {}
     for unique_fc in np.unique(frame_fc_map.fc_path.values):
         fc_files[unique_fc] = load_frame_container(unique_fc)
@@ -148,7 +120,14 @@ def get_frame_to_fc_path_dict(frame_fc_map : 'Dataframe') -> 'Dict':
     return frame_to_fc_map
 
 
-def map_additional_data_to_events(gt_events, frame_to_fc_map):
+def split_detection_id(detection_id: str) -> (int, int):
+    frame_id, detection_idx = detection_id[1:].split("d")
+    frame_id = int(frame_id)
+    detection_idx = int(detection_idx.split("c")[0])
+    return frame_id, detection_idx
+
+
+def map_additional_data_to_events(gt_events: List[Event], frame_to_fc_map):
     """For every event, map additional data.
     With the frame container / frame, we can now load all the original
     bb_binary data for the detections."""
@@ -157,9 +136,7 @@ def map_additional_data_to_events(gt_events, frame_to_fc_map):
         ts_set = set()
         for bee in range(len(event.detection_ids)):
             for detection_id in event.detection_ids[bee]:
-                frame_id, detection_idx = detection_id[1:].split("d")
-                frame_id = int(frame_id)
-                detection_idx = int(detection_idx.split("c")[0])
+                frame_id, detection_idx = split_detection_id(detection_id)
                 fc = frame_to_fc_map[frame_id]
                 frame = None
 
@@ -183,14 +160,14 @@ def map_additional_data_to_events(gt_events, frame_to_fc_map):
                 else:
                     ts_set.add(frame.timestamp)
 
-        abee = pandas.DataFrame(
+        abee = pd.DataFrame(
             beecoords[0],
             columns=(
                 "x1",
                 "y1",
                 "orient1",
                 "timestamp1"))
-        bbee = pandas.DataFrame(
+        bbee = pd.DataFrame(
             beecoords[1],
             columns=(
                 "x2",
@@ -198,8 +175,57 @@ def map_additional_data_to_events(gt_events, frame_to_fc_map):
                 "orient2",
                 "timestamp2"))
 
-        event.df = pandas.concat((abee, bbee), ignore_index=True, axis=1)
+        event.df = pd.concat((abee, bbee), ignore_index=True, axis=1)
         event.df.columns = list(abee.columns) + list(bbee.columns)
         assert len(ts_set) == 0
+
+
+def map_bee_ids(db: connection, events: List[Event]):
+    for event in events:
+        for i in range(2):
+            event.bee_ids[i] = get_bee_id(db, *split_detection_id(event.detection_ids[i]))
+    
+
+def get_bee_id(db: connection, frame_id: int, detection_idx: int):
+    cur = db.cursor()
+    query = "select bee_id from bb_detections where frame_id = {} and detection_idx = {};".format(frame_id, detection_idx);
+    cur.execute(query)
+    result = cur.fetchone()
+    if result:
+        return result[0]
+    else:
+        return -1
+
+
+def get_timestamp(db: connection, frame_id: int) -> str:
+    cur = db.cursor()
+    cur.execute("SELECT * FROM bb_detections where frame_id = {}".format(frame_id))
+    return str(cur.fetchone()[0])
+
+
+def get_frames_before_after(db: connection, frame_id: int, bee_ids: (int, int), num_frames: int, before: bool = True):
+    timestamp = get_timestamp(db=db, frame_id=frame_id)
+    
+    if before:
+        ltgt = "<" 
+        order = "desc"
+    else:
+        ltgt = ">" 
+        order = "asc"
+        
+    cur = db.cursor()
+        
+    query =  """SELECT timestamp, frame_id, x_pos, y_pos, orientation, bee_id FROM bb_detections 
+    where timestamp {} '{}' 
+    and (bee_id = {} or bee_id = {})
+    order by timestamp desc 
+    limit {}""".format(ltgt, timestamp, *bee_ids, num_frames * 2)
+
+    cur.execute(query)
+
+    rows = []
+    for timestamp, frame_id, x_pos, y_pos, orientation, bee_id in cur: 
+        rows.append((timestamp, frame_id, x_pos, y_pos, orientation, bee_id))
+    return pd.DataFrame(rows, columns=("timestamp", "frame_id", "x_pos", "y_pos", "orientation", "bee_id"))
 
 
