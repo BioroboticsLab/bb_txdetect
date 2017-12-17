@@ -9,6 +9,7 @@ from psycopg2.extensions import connection
 
 from typing import List, Dict
 
+
 class Event(object):
     track_ids = (None, None)
     detection_ids = (None, None)
@@ -31,7 +32,7 @@ class Event(object):
 
     @property
     def frame_ids(self):
-		# both bees have always the same frame_ids
+                # both bees have always the same frame_ids
         for detection_id in self.detection_ids[0]:
             yield int(detection_id[1:].split("d")[0])
 
@@ -88,7 +89,7 @@ def get_frame_container_info_for_frames(database, frame_ids):
         for frame_id in frame_container_to_frames[ID]:
             frame_to_fc_map.append((frame_id, fc_id, fc_path, video_name))
     frame_fc_map = pd.DataFrame(frame_to_fc_map,
-                                    columns=("frame_id", "fc_id", "fc_path", "video_name"))
+                                columns=("frame_id", "fc_id", "fc_path", "video_name"))
     return frame_fc_map
 
 
@@ -108,7 +109,7 @@ def get_all_frame_ids(gt_events):
     return all_frame_ids
 
 
-def get_frame_to_fc_path_dict(frame_fc_map : pd.DataFrame) -> Dict:
+def get_frame_to_fc_path_dict(frame_fc_map: pd.DataFrame) -> Dict:
     fc_files = {}
     for unique_fc in np.unique(frame_fc_map.fc_path.values):
         fc_files[unique_fc] = load_frame_container(unique_fc)
@@ -184,11 +185,12 @@ def map_bee_ids(db: connection, events: List[Event]):
     for event in events:
         for i in range(2):
             event.bee_ids[i] = get_bee_id(db, *split_detection_id(event.detection_ids[i]))
-    
+
 
 def get_bee_id(db: connection, frame_id: int, detection_idx: int):
     cur = db.cursor()
-    query = "select bee_id from bb_detections where frame_id = {} and detection_idx = {};".format(frame_id, detection_idx);
+    query = "select bee_id from bb_detections where frame_id = {} and detection_idx = {};".format(
+        frame_id, detection_idx)
     cur.execute(query)
     result = cur.fetchone()
     if result:
@@ -203,29 +205,30 @@ def get_timestamp(db: connection, frame_id: int) -> str:
     return str(cur.fetchone()[0])
 
 
-def get_frames_before_after(db: connection, frame_id: int, bee_ids: (int, int), num_frames: int, before: bool = True):
+def get_frames_before_after(db: connection, frame_id: int, bee_ids: (int, int),
+                            num_frames: int, before: bool = True):
+
     timestamp = get_timestamp(db=db, frame_id=frame_id)
-    
+
     if before:
-        ltgt = "<" 
+        ltgt = "<"
         order = "desc"
     else:
-        ltgt = ">" 
+        ltgt = ">"
         order = "asc"
-        
+
     cur = db.cursor()
-        
-    query =  """SELECT timestamp, frame_id, x_pos, y_pos, orientation, bee_id FROM bb_detections 
-    where timestamp {} '{}' 
+
+    query = """SELECT timestamp, frame_id, x_pos, y_pos, orientation, bee_id FROM bb_detections
+    where timestamp {} '{}'
     and (bee_id = {} or bee_id = {})
-    order by timestamp desc 
+    order by timestamp desc
     limit {}""".format(ltgt, timestamp, *bee_ids, num_frames * 2)
 
     cur.execute(query)
 
     rows = []
-    for timestamp, frame_id, x_pos, y_pos, orientation, bee_id in cur: 
+    for timestamp, frame_id, x_pos, y_pos, orientation, bee_id in cur:
         rows.append((timestamp, frame_id, x_pos, y_pos, orientation, bee_id))
-    return pd.DataFrame(rows, columns=("timestamp", "frame_id", "x_pos", "y_pos", "orientation", "bee_id"))
-
-
+    return pd.DataFrame(rows, columns=("timestamp", "frame_id",
+                                       "x_pos", "y_pos", "orientation", "bee_id"))
