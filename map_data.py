@@ -1,12 +1,13 @@
 import numpy as np
 import pandas as pd
+import matplotlib
 import json
 from tqdm import tqdm
 import seaborn as sns
 import psycopg2
 import bb_binary
-from psycopg2.extensions import connection
 
+from psycopg2.extensions import connection
 from typing import List, Dict
 
 
@@ -14,8 +15,11 @@ class Event(object):
     track_ids = (None, None)
     detection_ids = (None, None)
     bee_ids = (None, None)
-    begin_frame_idx, end_frame_idx = np.NaN, np.NaN
+    begin_frame_idx, end_frame_idx = -1, -1
     trophallaxis_observed = False
+    df = None
+    df_before = None
+    df_after = None
 
     def __init__(self, row):
         self.detection_ids = (
@@ -26,15 +30,22 @@ class Event(object):
             .replace("'", "\"")
             .replace("(", "[")
             .replace(")", "]"))
-        self.begin_frame_idx = row.trophallaxis_start_frame_nr
-        self.end_frame_idx = row.trophallaxis_end_frame_nr
+        self.begin_frame_idx = np_float_to_int(row.trophallaxis_start_frame_nr)
+        self.end_frame_idx = np_float_to_int(row.trophallaxis_end_frame_nr)
         self.trophallaxis_observed = row.trophallaxis_observed == 'y'
 
     @property
     def frame_ids(self):
-                # both bees have always the same frame_ids
+        # both bees have always the same frame_ids
         for detection_id in self.detection_ids[0]:
             yield int(detection_id[1:].split("d")[0])
+
+
+def np_float_to_int(x: np.float) -> int:
+    if(np.isnan(x)):
+        return -1
+    else:
+        return int(x)
 
 
 def setSnsStyle(style: str):
@@ -55,14 +66,14 @@ def connect():
         "dbname='beesbook' user='reader' host='localhost' password='reader'")
 
 
-def load_gt_data():
-    gt_data = pd.read_csv('csv/ground_truth_concat.csv', index_col=0)
+def load_gt_data(path: str = 'csv/ground_truth_concat.csv'):
+    gt_data = pd.read_csv(path, index_col=0)
     gt_data = gt_data[gt_data.human_decidable_interaction == "y"]
 
     gt_events = []
     for i in tqdm(range(gt_data.shape[0])):
         gt_events.append(Event(gt_data.iloc[i, :]))
-    print("Ground truth events loaded: {}".format(len(gt_events)))
+    tqdm.write("Ground truth events loaded: {}".format(len(gt_events)))
     return gt_events, gt_data
 
 
@@ -105,7 +116,7 @@ def get_all_frame_ids(gt_events):
     for event in gt_events:
         for frame_id in event.frame_ids:
             all_frame_ids.add(frame_id)
-    print("Unique frame ids: {}".format(len(all_frame_ids)))
+    tqdm.write("Unique frame ids: {}".format(len(all_frame_ids)))
     return all_frame_ids
 
 
@@ -182,9 +193,11 @@ def map_additional_data_to_events(gt_events: List[Event], frame_to_fc_map):
 
 
 def map_bee_ids(db: connection, events: List[Event]):
-    for event in events:
-        for i in range(2):
-            event.bee_ids[i] = get_bee_id(db, *split_detection_id(event.detection_ids[i]))
+    tqdm.write("map bee ids")
+    for event in tqdm(events):
+        event.bee_ids = (get_bee_id(db, *split_detection_id(event.detection_ids[0][0])),
+                         get_bee_id(db, *split_detection_id(event.detection_ids[1][0])))
+
 
 
 def get_bee_id(db: connection, frame_id: int, detection_idx: int):
@@ -223,12 +236,40 @@ def get_frames_before_after(db: connection, frame_id: int, bee_ids: (int, int),
     where timestamp {} '{}'
     and (bee_id = {} or bee_id = {})
     order by timestamp desc
-    limit {}""".format(ltgt, timestamp, *bee_ids, num_frames * 2)
+    limit {}""".format(ltgt, timestamp, *bee_ids, num_frames * 4) # order double amount of frames to have enough if some need to be skipped
 
     cur.execute(query)
 
-    rows = []
+    rows = ([], [])
     for timestamp, frame_id, x_pos, y_pos, orientation, bee_id in cur:
-        rows.append((timestamp, frame_id, x_pos, y_pos, orientation, bee_id))
-    return pd.DataFrame(rows, columns=("timestamp", "frame_id",
-                                       "x_pos", "y_pos", "orientation", "bee_id"))
+        rows[bee_ids.index(bee_id)].append((timestamp, frame_id, x_pos, y_pos, orientation, bee_id))
+
+    merged = []
+    li = 0
+    ri = 0
+    while (li < len(rows[0]) and ri < len(rows[1])) and not (li >= num_frames and ri >= num_frames):
+        left = rows[0][li]
+        right = rows[1][ri]
+
+        if left[0] < right[0]:
+            li += 1
+        elif left[0] > right[0]:
+            ri += 1
+        else:
+            merged.append((left[2], left[3], left[4], left[0],
+                           right[2], right[3], right[4], right[0]))
+            ri += 1
+            li += 1
+
+    return pd.DataFrame(merged, columns=("x1", "y1", "orient1", "timestamp1", "x2", "y2", "orient2", "timestamp2"))
+
+
+def map_frames_before_after(db: connection, events: List[Event], num_frames: int):
+    tqdm.write("map frames before and after")
+    for event in tqdm(events):
+        frame_ids = list(event.frame_ids)
+        event.df_before = get_frames_before_after(db=db, frame_id=frame_ids[0], 
+                                                  bee_ids=event.bee_ids, num_frames=num_frames, before=True)
+        event.df_after = get_frames_before_after(db=db, frame_id=frame_ids[len(list(event.frame_ids))-1], 
+                                                 bee_ids=event.bee_ids, num_frames=num_frames, before=False)
+

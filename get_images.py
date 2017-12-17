@@ -7,12 +7,13 @@ from scipy.ndimage.interpolation import rotate
 from numpy import ndarray
 import math
 from tqdm import tqdm
+from map_data import Event
 
 FINAL_SIZE = 128
 SIZE_BEFORE_ROTATION = math.ceil(FINAL_SIZE * math.sqrt(2))
 
 
-def get_crop_coordinates(event: 'Event', frame_index: int, size: int = SIZE_BEFORE_ROTATION):
+def get_crop_coordinates(event: Event, frame_index: int, size: int = SIZE_BEFORE_ROTATION):
     x1 = int(event.df.x1.values[frame_index])
     y1 = int(event.df.y1.values[frame_index])
     x2 = int(event.df.x2.values[frame_index])
@@ -22,16 +23,16 @@ def get_crop_coordinates(event: 'Event', frame_index: int, size: int = SIZE_BEFO
     return xc - size / 2, yc - size / 2, xc + size / 2 - 1, yc + size / 2 - 1
 
 
-def get_frame_plotter(event: 'Event', frame_index: int) -> FramePlotter:
+def get_frame_plotter(event: Event, frame_index: int) -> FramePlotter:
     return FramePlotter(frame_id=list(event.frame_ids)[frame_index], scale=1.0,
                         crop_coordinates=get_crop_coordinates(event=event, frame_index=frame_index))
 
 
-def get_center_frame_index(event: 'Event') -> int:
+def get_center_frame_index(event: Event) -> int:
     return int(event.begin_frame_idx + (event.end_frame_idx - event.begin_frame_idx) / 2)
 
 
-def get_videos_around_center(events: List['Event']):
+def get_videos_around_center(events: List[Event]):
     i = 0
     for event in tqdm(events):
         # print("start fp")
@@ -49,12 +50,12 @@ def get_videos_around_center(events: List['Event']):
         i += 1
 
 
-def get_center_frame_image(event: 'Event'):
+def get_center_frame_image(event: Event):
     fp = get_frame_plotter(event=event, frame_index=get_center_frame_index(event))
     return fp.get_image()
 
 
-def get_all_images(event: 'Event'):
+def get_all_images(event: Event):
     images = []
     ids = list(event.frame_ids)
     for i in tqdm(range(len(ids))):
@@ -63,11 +64,11 @@ def get_all_images(event: 'Event'):
     return images
 
 
-def first_bee_rotation(event: 'Event', frame_index: int) -> float:
+def first_bee_rotation(event: Event, frame_index: int) -> float:
     return float(event.df.orient1.values[frame_index])
 
 
-def rotate_image(image: ndarray, event: 'Event', frame_index: int) -> ndarray:
+def rotate_image(image: ndarray, event: Event, frame_index: int) -> ndarray:
     """rotates the image around the center to show bee one at the bottom looking north"""
     return rotate(input=image,
                   angle=math.degrees(first_bee_rotation(event=event, frame_index=frame_index)),
