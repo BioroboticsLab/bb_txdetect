@@ -20,7 +20,9 @@ class Event(object):
     begin_frame_idx, end_frame_idx = -1, -1
     trophallaxis_observed = False
     df = None
+    frames_ids_before = None
     frames_before = None
+    frames_ids_after = None
     frames_after = None
 
     def __init__(self, row):
@@ -61,6 +63,7 @@ def setSnsStyle(style: str):
     matplotlib.rcParams['ytick.labelsize'] = 16
     matplotlib.rcParams['axes.titlesize'] = 16
     matplotlib.rcParams['axes.labelsize'] = 16
+
 
 class DataMapper:
     get_bee_id_is_prepared = False
@@ -207,7 +210,7 @@ class DataMapper:
     def get_bee_id(self, frame_id: int, detection_idx: int):
         cur = self.db.cursor()
         if not self.get_bee_id_is_prepared:
-            cur.execute("PREPARE get_bee_id AS SELECT bee_id FROM bb_detections WHERE frame_id = $1 AND detection_idx = $2;")
+            cur.execute("PREPARE get_bee_id AS SELECT bee_id FROM bb_detections_subset WHERE frame_id = $1 AND detection_idx = $2;")
             self.get_bee_id_is_prepared = True
         cur.execute("EXECUTE get_bee_id (%s, %s);", (frame_id, detection_idx))
         result = cur.fetchone()
@@ -217,25 +220,25 @@ class DataMapper:
             return -1
 
 
-    def get_timestamp(self, frame_id: int) -> str:
+    def get_timestamp(self, frame_id: int):
         cur = self.db.cursor()
         cur.execute("SELECT timestamp FROM plotter_frame where frame_id = %s", (frame_id,))
-        return str(cur.fetchone()[0])
+        return cur.fetchone()[0]
 
 
     def map_frames_before_after(self, num_frames: int):
         tqdm.write("map frames before and after")
         for event in tqdm(self.gt_events):
             frame_ids = list(event.frame_ids)
-            event.frames_before, event.frames_after = self.get_frames_before_after(frame_id_begin=frame_ids[0], 
-                                                                                   frame_id_end=frame_ids[len(list(event.frame_ids))-1],
-                                                                                   bee_ids=event.bee_ids, 
-                                                                                   num_frames=num_frames)
+            event.frame_ids_before, event.frames_before, event.frame_ids_after, event.frames_after = self.get_frames_before_after(frame_id_begin=frame_ids[0], 
+                                                                                                     frame_id_end=frame_ids[len(list(event.frame_ids))-1],
+                                                                                                     bee_ids=event.bee_ids, 
+                                                                                                     num_frames=num_frames)
 
 
     def get_position_and_orientation(self, frame_id: int, bee_ids: (int, int)):
         cursor = self.db.cursor()
-        cursor.execute("SELECT bee_id, x_pos, y_pos, orientation FROM bb_detections where frame_id = %s and (bee_id = %s or bee_id = %s)",
+        cursor.execute("SELECT bee_id, x_pos, y_pos, orientation FROM bb_detections_subset where frame_id = %s and (bee_id = %s or bee_id = %s)",
                        (frame_id, *bee_ids))
         return list(cursor)
 
@@ -246,38 +249,49 @@ class DataMapper:
         timestamp_begin = self.get_timestamp(frame_id=frame_id_begin)
         timestamp_end = self.get_timestamp(frame_id=frame_id_end)
         seconds = num_frames / 3
-        
+
         cursor = self.db.cursor()
         cursor.execute("SELECT frame_id FROM plotter_frame WHERE timestamp >= %s AND timestamp < %s", 
                        (timestamp_begin - seconds, timestamp_begin))
 
-        results_before = interpolate(cursor)
+        frame_ids_before, results_before = self.interpolate(cursor, bee_ids)
+
+        if 11978362247480082432 in results_before:
+            import pdb; pdb.set_trace()
         
         cursor.execute("SELECT frame_id FROM plotter_frame WHERE timestamp > %s AND timestamp <= %s", 
                        (timestamp_end, timestamp_end + seconds))
 
-        results_after = interpolate(cursor)
-        return (results_before, results_after)
+        frame_ids_after, results_after = self.interpolate(cursor, bee_ids)
+
+        if 11978362247480082432 in results_after:
+            import pdb; pdb.set_trace()
+
+        return (frame_ids_before, results_before, frame_ids_after, results_after)
 
 
-    def interpolate(self, cursor):
-        results = np.empty(cursor.rowcount, 6)
+    def interpolate(self, cursor, bee_ids):
+        results = np.empty((cursor.rowcount, 6), dtype=np.float32)
         results[:,:] = np.nan
+        frame_ids = []
         i = 0
         for row in cursor:
             frame_id = row[0]
-            detections = get_position_and_orientation(frame_id=frame_id, bee_ids=bee_ids)
+            detections = self.get_position_and_orientation(frame_id=frame_id, bee_ids=bee_ids)
+            frame_ids.append(frame_id)
             for d in detections:
                 if d[0] == bee_ids[0]:
-                    results[1,:3] = [d[1], d[2], d[3]]
+                    results[i,:3] = [d[1], d[2], d[3]]
                 else:
-                    results[1,3:] = [d[1], d[2], d[3]]
+                    results[i,3:] = [d[1], d[2], d[3]]
             i += 1
 
         # now results may have gaps with nans, but all frames are included
 
         interpolate_trajectory(results[:,:3])
         interpolate_trajectory(results[:,3:])
+
+        return (frame_ids, results)
         
 
 @numba.njit
@@ -315,7 +329,7 @@ def interpolate_trajectory(trajectory):
         dx = (end_t_idx - begin_t_idx) / 3.0
         m = [(next_t[0] - last_t[0]) / dx,
              (next_t[1] - last_t[1]) / dx,
-             short_angle_dist(last_t[0], next_t[0]) / dx]
+             short_angle_dist(last_t[2], next_t[2]) / dx]
  
         dt = (i - begin_t_idx) / 3.0
         e = [m[i] * dt + last_t[i] for i in range(3)]
