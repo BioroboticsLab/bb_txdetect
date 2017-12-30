@@ -24,6 +24,8 @@ class Event(object):
     frames_before = None
     frames_ids_after = None
     frames_after = None
+    not_nans_before = None
+    not_nans_after = None
 
     def __init__(self, row):
         self.detection_ids = (
@@ -230,10 +232,11 @@ class DataMapper:
         tqdm.write("map frames before and after")
         for event in tqdm(self.gt_events):
             frame_ids = list(event.frame_ids)
-            event.frame_ids_before, event.frames_before, event.frame_ids_after, event.frames_after = self.get_frames_before_after(frame_id_begin=frame_ids[0], 
-                                                                                                     frame_id_end=frame_ids[len(list(event.frame_ids))-1],
-                                                                                                     bee_ids=event.bee_ids, 
-                                                                                                     num_frames=num_frames)
+            self.set_frames_before_after(frame_id_begin=frame_ids[0], 
+                                         frame_id_end=frame_ids[len(list(event.frame_ids))-1],
+                                         bee_ids=event.bee_ids, 
+                                         num_frames=num_frames, 
+                                         event=event)
 
 
     def get_position_and_orientation(self, frame_id: int, bee_ids: (int, int)):
@@ -244,7 +247,7 @@ class DataMapper:
 
 
 
-    def get_frames_before_after(self, frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), num_frames: int):
+    def set_frames_before_after(self, frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), num_frames: int, event: Event):
 
         timestamp_begin = self.get_timestamp(frame_id=frame_id_begin)
         timestamp_end = self.get_timestamp(frame_id=frame_id_end)
@@ -254,20 +257,14 @@ class DataMapper:
         cursor.execute("SELECT frame_id FROM plotter_frame WHERE timestamp >= %s AND timestamp < %s", 
                        (timestamp_begin - seconds, timestamp_begin))
 
-        frame_ids_before, results_before = self.interpolate(cursor, bee_ids)
-
-        if 11978362247480082432 in results_before:
-            import pdb; pdb.set_trace()
+        event.frame_ids_before, event.frames_before, event.not_nans_a_before, event.not_nans_b_before= self.interpolate(cursor, bee_ids)
         
         cursor.execute("SELECT frame_id FROM plotter_frame WHERE timestamp > %s AND timestamp <= %s", 
                        (timestamp_end, timestamp_end + seconds))
 
-        frame_ids_after, results_after = self.interpolate(cursor, bee_ids)
+        event.frame_ids_after, event.frames_after, event.not_nans_a_after, event.not_nans_b_after= self.interpolate(cursor, bee_ids)
 
-        if 11978362247480082432 in results_after:
-            import pdb; pdb.set_trace()
 
-        return (frame_ids_before, results_before, frame_ids_after, results_after)
 
 
     def interpolate(self, cursor, bee_ids):
@@ -288,10 +285,10 @@ class DataMapper:
 
         # now results may have gaps with nans, but all frames are included
 
-        interpolate_trajectory(results[:,:3])
-        interpolate_trajectory(results[:,3:])
+        not_nans_a = interpolate_trajectory(results[:,:3])
+        not_nans_b = interpolate_trajectory(results[:,3:])
 
-        return (frame_ids, results)
+        return (frame_ids, results, not_nans_a, not_nans_b)
         
 
 @numba.njit

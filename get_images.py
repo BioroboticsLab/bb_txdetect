@@ -14,10 +14,14 @@ from typing import List, Dict
 FINAL_SIZE = 512
 SIZE_BEFORE_ROTATION = math.ceil(FINAL_SIZE * math.sqrt(2))
 
+debug_vals = []
+debug_vals_rotation = []
 
 def get_crop_coordinates(x1:int, y1:int, x2:int, y2: int, size: int = SIZE_BEFORE_ROTATION):
     xc = min(x1, x2) + abs(x1 - x2) // 2
     yc = min(y1, y2) + abs(y1 - y2) // 2
+    global debug_vals
+    debug_vals.append((xc,yc,x1,y1,x2,y2))
     return int(xc - size // 2), int(yc - size // 2), int(xc + size // 2 - 1), int(yc + size // 2 - 1)
 
 
@@ -73,7 +77,8 @@ def get_all_images(event: Event):
         for i in tqdm(range(arr.shape[0])):
             fp = get_frame_plotter(frame_id=frame_ids[i], x1=arr[i,0], y1=arr[i,1], 
                                    x2=arr[i,3], y2=arr[i,4])
-            img = fp.get_image()
+            #img = fp.get_image()
+            img = np.empty((2,2))
             # TODO it should be an option to rotate to bee one or bee two, could be used for augmentation
             images.append(crop_image(rotate_image(image=img, bee_orientation=arr[i,2])))
 
@@ -82,7 +87,8 @@ def get_all_images(event: Event):
     ids = list(event.frame_ids)
     for i in tqdm(range(len(ids))):
         fp = get_frame_plotter_by_event(event=event, frame_index=i)
-        img = fp.get_image()
+        #img = fp.get_image()
+        img = np.empty((2,2))
         # TODO it should be an option to rotate to bee one or bee two, could be used for augmentation
         images.append(crop_image(rotate_image(image=img, bee_orientation=event.df.orient1.values[i])))
 
@@ -93,6 +99,8 @@ def get_all_images(event: Event):
 
 def rotate_image(image: np.ndarray, bee_orientation: float) -> np.ndarray:
     """rotates the image around the center to show one bee at the bottom looking north"""
+    global debug_vals_rotation
+    debug_vals_rotation.append(math.degrees(bee_orientation))
     return rotate(input=image, angle=math.degrees(bee_orientation), reshape=False)
 
 
