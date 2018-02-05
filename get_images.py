@@ -10,8 +10,7 @@ from tqdm import tqdm
 from map_data import Event
 from typing import List, Dict
 
-#FINAL_SIZE = 128
-FINAL_SIZE = 512
+FINAL_SIZE = 128
 SIZE_BEFORE_ROTATION = math.ceil(FINAL_SIZE * math.sqrt(2))
 
 debug_vals = []
@@ -77,8 +76,7 @@ def get_all_images(event: Event):
         for i in tqdm(range(arr.shape[0])):
             fp = get_frame_plotter(frame_id=frame_ids[i], x1=arr[i,0], y1=arr[i,1], 
                                    x2=arr[i,3], y2=arr[i,4])
-            #img = fp.get_image()
-            img = np.empty((2,2))
+            img = fp.get_image()
             # TODO it should be an option to rotate to bee one or bee two, could be used for augmentation
             images.append(crop_image(rotate_image(image=img, bee_orientation=arr[i,2])))
 
@@ -87,8 +85,7 @@ def get_all_images(event: Event):
     ids = list(event.frame_ids)
     for i in tqdm(range(len(ids))):
         fp = get_frame_plotter_by_event(event=event, frame_index=i)
-        #img = fp.get_image()
-        img = np.empty((2,2))
+        img = fp.get_image()
         # TODO it should be an option to rotate to bee one or bee two, could be used for augmentation
         images.append(crop_image(rotate_image(image=img, bee_orientation=event.df.orient1.values[i])))
 

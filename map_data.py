@@ -212,7 +212,7 @@ class DataMapper:
     def get_bee_id(self, frame_id: int, detection_idx: int):
         cur = self.db.cursor()
         if not self.get_bee_id_is_prepared:
-            cur.execute("PREPARE get_bee_id AS SELECT bee_id FROM bb_detections_subset WHERE frame_id = $1 AND detection_idx = $2;")
+            cur.execute("PREPARE get_bee_id AS SELECT bee_id FROM bb_detections WHERE frame_id = $1 AND detection_idx = $2;")
             self.get_bee_id_is_prepared = True
         cur.execute("EXECUTE get_bee_id (%s, %s);", (frame_id, detection_idx))
         result = cur.fetchone()
@@ -235,47 +235,79 @@ class DataMapper:
             self.set_frames_before_after(frame_id_begin=frame_ids[0], 
                                          frame_id_end=frame_ids[len(list(event.frame_ids))-1],
                                          bee_ids=event.bee_ids, 
-                                         num_frames=num_frames, 
-                                         event=event)
+                                         event=event,
+                                         num_frames=num_frames)
 
 
     def get_position_and_orientation(self, frame_id: int, bee_ids: (int, int)):
         cursor = self.db.cursor()
-        cursor.execute("SELECT bee_id, x_pos, y_pos, orientation FROM bb_detections_subset where frame_id = %s and (bee_id = %s or bee_id = %s)",
+        cursor.execute("SELECT bee_id, x_pos, y_pos, orientation FROM bb_detections WHERE frame_id = %s and (bee_id = %s or bee_id = %s)",
                        (frame_id, *bee_ids))
         return list(cursor)
 
 
+    def get_neighbour_frames(self, frame_id, n_frames=None, seconds=None, mode: str = 'around'):
+        seconds = seconds or (n_frames / 3 if n_frames else 5.0)
+        
+        with psycopg2.connect("dbname='beesbook' user='reader' host='localhost' password='reader'",
+                              application_name="get_neighbour_frames") as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT index, fc_id, timestamp FROM plotter_frame WHERE frame_id = %s LIMIT 1", (frame_id,))
+            f_index, fc_id, timestamp = cursor.fetchone()
+            
+            #print(f"Frame index: {f_index}, timestamp: {timestamp}, container ID: {fc_id}")
 
-    def set_frames_before_after(self, frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), num_frames: int, event: Event):
+            if mode == 'before':
+                ts1 = timestamp - seconds
+                ts2 = timestamp
+            if mode == 'after':
+                ts1 = timestamp 
+                ts2 = timestamp + seconds
+            if mode == 'around':
+                ts1 = timestamp - seconds
+                ts2 = timestamp + seconds
+            
+            cursor.execute("SELECT timestamp, frame_id, fc_id FROM plotter_frame WHERE timestamp >= %s AND timestamp <= %s", (ts1, ts2))
+            results = list(cursor)
+            containers = {fc_id for (_, _, fc_id) in results}
+            
+            cursor.execute("PREPARE fetch_container AS "
+                       "SELECT CAST(SUBSTR(video_name, 5, 1) AS INT) FROM plotter_framecontainer "
+                       "WHERE id = $1")
+            cursor.execute("EXECUTE fetch_container (%s)", (fc_id,))
+            target_cam = cursor.fetchone()[0]
+            #print (f"Target cam: {target_cam}")
+            matching_cam = set()
+            for container in containers:
+                cursor.execute("EXECUTE fetch_container (%s)", (container,))
+                cam = cursor.fetchone()[0]
+                #print (f"\tChecking cam: {cam}...")
+                if cam == target_cam:
+                    matching_cam.add(container)
+            results = [(timestamp, frame_id, target_cam) for (timestamp, frame_id, fc_id) in results if fc_id in matching_cam]
+            return sorted(results)
 
+
+    def set_frames_before_after(self, frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), event: Event, num_frames: int = None, seconds: int = None):
         timestamp_begin = self.get_timestamp(frame_id=frame_id_begin)
         timestamp_end = self.get_timestamp(frame_id=frame_id_end)
         seconds = num_frames / 3
 
-        cursor = self.db.cursor()
-        cursor.execute("SELECT frame_id FROM plotter_frame WHERE timestamp >= %s AND timestamp < %s", 
-                       (timestamp_begin - seconds, timestamp_begin))
+        frames = self.get_neighbour_frames(frame_id=frame_id_begin, n_frames=num_frames, mode='before')
+        event.frame_ids_before = [frame_id for (timestamp, frame_id, fc_id) in frames]
+        event.frames_before, event.not_nans_a_before, event.not_nans_b_before = self.interpolate(event.frame_ids_before, bee_ids)
 
-        event.frame_ids_before, event.frames_before, event.not_nans_a_before, event.not_nans_b_before= self.interpolate(cursor, bee_ids)
-        
-        cursor.execute("SELECT frame_id FROM plotter_frame WHERE timestamp > %s AND timestamp <= %s", 
-                       (timestamp_end, timestamp_end + seconds))
-
-        event.frame_ids_after, event.frames_after, event.not_nans_a_after, event.not_nans_b_after= self.interpolate(cursor, bee_ids)
+        frames = self.get_neighbour_frames(frame_id=frame_id_end, n_frames=num_frames, mode='after')
+        event.frame_ids_after = [frame_id for (timestamp, frame_id, fc_id) in frames]
+        event.frames_after, event.not_nans_a_after, event.not_nans_b_after = self.interpolate(event.frame_ids_after, bee_ids)
 
 
-
-
-    def interpolate(self, cursor, bee_ids):
-        results = np.empty((cursor.rowcount, 6), dtype=np.float32)
+    def interpolate(self, frame_ids, bee_ids):
+        results = np.empty((len(frame_ids), 6), dtype=np.float32)
         results[:,:] = np.nan
-        frame_ids = []
         i = 0
-        for row in cursor:
-            frame_id = row[0]
+        for frame_id in frame_ids:
             detections = self.get_position_and_orientation(frame_id=frame_id, bee_ids=bee_ids)
-            frame_ids.append(frame_id)
             for d in detections:
                 if d[0] == bee_ids[0]:
                     results[i,:3] = [d[1], d[2], d[3]]
@@ -288,7 +320,7 @@ class DataMapper:
         not_nans_a = interpolate_trajectory(results[:,:3])
         not_nans_b = interpolate_trajectory(results[:,3:])
 
-        return (frame_ids, results, not_nans_a, not_nans_b)
+        return (results, not_nans_a, not_nans_b)
         
 
 @numba.njit
