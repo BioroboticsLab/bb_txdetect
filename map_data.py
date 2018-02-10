@@ -43,17 +43,25 @@ class Event(object):
 class Observation(object):
     def __init__(self, frame_id, xs, ys, orientations):
         self.frame_id = frame_id
-        self.xs = xs
-        self.ys = ys
+        self.xs = [int(x) for x in xs]
+        self.ys = [int(y) for y in ys]
         self.orientations = orientations
         self.trophallaxis_observed = None
+        self.image = None
 
+    @property
     def file_name(self) -> str:
+        if self.trophallaxis_observed is None:
+            label = "u"
+        elif self.trophallaxis_observed:
+            label = "y"
+        else:
+            label = "n"
         return "{}_{}_{}_{}_{}_{}_{}_{}".format(self.frame_id,
                                                 *self.xs,
                                                 *self.ys,
-                                                *self.orientations,
-                                                self.trophallaxis_observed)
+                                                *[int((math.degrees(o) + 360) % 360) for o in self.orientations],
+                                                label)
 
 
 def np_float_to_int(x: np.float) -> int:
@@ -232,15 +240,13 @@ class DataMapper:
                                                      bee_ids=event.bee_ids,
                                                      frame_padding_length=padding)
             event.padding = padding
-            i = 0
-            for obs in event.observations:
+            for i, obs in enumerate(event.observations):
                 if i < padding or i >= len(event.observations) - padding:
                     obs.trophallaxis_observed = None
                 elif i >= event.begin_frame_idx and i <= event.end_frame_idx:
                     obs.trophallaxis_observed = True
                 else:
                     obs.trophallaxis_observed = False
-                i += 1
 
     def get_position_and_orientation(self, frame_id: int, bee_ids: (int, int)):
         cursor = self.db.cursor()
@@ -311,8 +317,7 @@ class DataMapper:
     def interpolate(self, frame_ids, bee_ids):
         results = np.empty((len(frame_ids), 6), dtype=np.float32)
         results[:, :] = np.nan
-        i = 0
-        for frame_id in frame_ids:
+        for i, frame_id in enumerate(frame_ids):
             detections = self.get_position_and_orientation(
                 frame_id=frame_id, bee_ids=bee_ids)
             for d in detections:
@@ -320,7 +325,6 @@ class DataMapper:
                     results[i, :3] = [d[1], d[2], d[3]]
                 else:
                     results[i, 3:] = [d[1], d[2], d[3]]
-            i += 1
 
         # now results may have gaps with nans, but all frames are included
 

@@ -1,13 +1,15 @@
 import math
-from typing import List, Dict
-from bb_backend.api import FramePlotter, VideoPlotter
+import os
+from bb_backend.api import FramePlotter
 from scipy.ndimage.interpolation import rotate
+from scipy.misc import imsave
 import numpy as np
 from tqdm import tqdm
-from map_data import Event
+from map_data import Observation
 
 FINAL_SIZE = 128
 SIZE_BEFORE_ROTATION = math.ceil(FINAL_SIZE * math.sqrt(2))
+IMAGE_FOLDER = "images"
 
 
 def get_crop_coordinates(x1: int, y1: int, x2: int, y2: int, size: int = SIZE_BEFORE_ROTATION):
@@ -23,15 +25,25 @@ def get_frame_plotter(obs: Observation) -> FramePlotter:
                         raw=True)
 
 
-def get_all_images(event: Event):
-    images = []
+def save_images(observations: [Observation]):
+    first = observations[0]
+    last = observations[-1]
+    path = "{}/{}_{}_{}_{}_{}_{}".format(IMAGE_FOLDER,
+                                         first.frame_id, last.frame_id,
+                                         first.xs[0], last.xs[0],
+                                         first.ys[0], last.ys[0])
+    if not os.path.isdir(IMAGE_FOLDER):
+        os.mkdir(IMAGE_FOLDER)
 
-    for obs in tqdm(event.observations):
-        img = get_frame_plotter(obs).get_image()
-        images.append(crop_image(rotate_image(
-            image=img, bee_orientation=obs.orientations[0])))
+    if os.path.isdir(path):
+        raise NameError("folder path for saving images already exists: {}".format(path))
 
-    return images
+    os.mkdir(path)
+
+    for i, obs in enumerate(tqdm(observations)):
+        obs.image = get_frame_plotter(obs).get_image()
+        imsave("{}/{:03}_{}.png".format(path, i, obs.file_name), obs.image)
+
 
 
 def rotate_image(image: np.ndarray, bee_orientation: float) -> np.ndarray:
