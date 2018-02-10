@@ -22,7 +22,7 @@ def get_frame_plotter(obs: Observation) -> FramePlotter:
     return FramePlotter(frame_id=int(obs.frame_id), scale=1.0,
                         crop_coordinates=get_crop_coordinates(
                             obs.xs[0], obs.ys[0], obs.xs[1], obs.ys[1]),
-                        raw=True)
+                        raw=True, no_rotate=True, decode_all_frames=False)
 
 
 def save_images(observations: [Observation]):
