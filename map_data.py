@@ -47,7 +47,6 @@ class Observation(object):
         self.ys = [int(y) for y in ys]
         self.orientations = orientations
         self.trophallaxis_observed = None
-        self.image = None
 
     @property
     def file_name(self) -> str:
@@ -306,7 +305,7 @@ class DataMapper:
 
     def get_all_frames(self, frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), frame_padding_length: int = None):
         frames = self.get_neighbour_frames(
-            frame_id1=frame_id_begin, frame_id2=frame_id_end, n_frames=frame_padding_length, mode='before')
+            frame_id1=frame_id_begin, frame_id2=frame_id_end, n_frames=frame_padding_length, mode='around')
         frame_ids = [frame_id for (timestamp, frame_id, fc_id) in frames]
         interpolated = self.interpolate(frame_ids, bee_ids)
         return [Observation(frame_id=frame_ids[i],
