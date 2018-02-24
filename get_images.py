@@ -1,10 +1,10 @@
 import math
 import os
+import datetime
 from bb_backend.api import FramePlotter
 from scipy.ndimage.interpolation import rotate
 from scipy.misc import imsave
 import numpy as np
-from tqdm import tqdm
 from map_data import Observation
 
 FINAL_SIZE = 128
@@ -63,7 +63,7 @@ def save_images(observations: [Observation], index: int):
 
     os.mkdir(folder)
 
-    for i, obs in enumerate(tqdm(observations)):
+    for i, obs in enumerate(observations):
         if i == 0:
             decode_n_frames = len(observations)
         else:
@@ -77,7 +77,7 @@ def save_images(observations: [Observation], index: int):
         save(hide_tags=False)
         save(hide_tags=True)
 
-
+    print(str(datetime.datetime.now()), "event", index, "complete")
     
 
 def rotate_image(image: np.ndarray, bee_orientation: float) -> np.ndarray:

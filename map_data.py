@@ -85,17 +85,29 @@ def setSnsStyle(style: str):
 class DataMapper:
     get_bee_id_is_prepared = False
     db = None
+    hide_progress_bars = True
+
+    def __init__(self, path: str, hide_progress_bars=False):
+        setSnsStyle("ticks")
+        self.hide_progress_bars = hide_progress_bars
+        self.connect()
+        self.load_gt_data(path=path)
+        frame_fc_map = self.get_frame_container_info_for_frames(list(self.get_all_frame_ids()))
+        frame_to_fc_map = self.get_frame_to_fc_path_dict(frame_fc_map)
+        self.map_additional_data_to_events(frame_to_fc_map)
+        self.map_bee_ids()
+        self.map_observations(padding=8)
 
     def connect(self):
         self.db = psycopg2.connect(
             "dbname='beesbook' user='reader' host='localhost' password='reader'")
 
-    def load_gt_data(self, path: str = 'csv/ground_truth_concat.csv'):
+    def load_gt_data(self, path: str):
         gt_data = pd.read_csv(path, index_col=0)
         gt_data = gt_data[gt_data.human_decidable_interaction == "y"]
 
         self.gt_events = []
-        for i in tqdm(range(gt_data.shape[0])):
+        for i in tqdm(range(gt_data.shape[0]), disable=self.hide_progress_bars):
             self.gt_events.append(Event(gt_data.iloc[i, :]))
         tqdm.write("Ground truth events loaded: {}".format(
             len(self.gt_events)))
@@ -110,7 +122,7 @@ class DataMapper:
             (tuple(frame_ids),))
 
         frame_container_to_frames = {}
-        for fc_id, frame_id in tqdm(cur):
+        for fc_id, frame_id in tqdm(cur, disable=self.hide_progress_bars):
             if fc_id not in frame_container_to_frames:
                 frame_container_to_frames[fc_id] = []
             frame_container_to_frames[fc_id].append(frame_id)
@@ -147,7 +159,7 @@ class DataMapper:
             fc_files[unique_fc] = self.load_frame_container(unique_fc)
 
         frame_to_fc_map = {}
-        for fc_path, df in tqdm(frame_fc_map.groupby("fc_path")):
+        for fc_path, df in tqdm(frame_fc_map.groupby("fc_path"), disable=self.hide_progress_bars):
             for frame in df.frame_id.values:
                 frame_to_fc_map[frame] = fc_files[fc_path]
         return frame_to_fc_map
@@ -162,7 +174,7 @@ class DataMapper:
         """For every event, map additional data.
         With the frame container / frame, we can now load all the original
         bb_binary data for the detections."""
-        for event in tqdm(self.gt_events):
+        for event in tqdm(self.gt_events, disable=self.hide_progress_bars):
             beecoords = ([], [])
             ts_set = set()
             for bee in range(len(event.detection_ids)):
@@ -213,7 +225,7 @@ class DataMapper:
 
     def map_bee_ids(self):
         tqdm.write("map bee ids")
-        for event in tqdm(self.gt_events):
+        for event in tqdm(self.gt_events, disable=self.hide_progress_bars):
             event.bee_ids = (self.get_bee_id(*self.split_detection_id(event.detection_ids[0][0])),
                              self.get_bee_id(*self.split_detection_id(event.detection_ids[1][0])))
 
@@ -231,7 +243,7 @@ class DataMapper:
 
     def map_observations(self, padding: int):
         tqdm.write("map frames before and after")
-        for event in tqdm(self.gt_events):
+        for event in tqdm(self.gt_events, disable=self.hide_progress_bars):
             frame_ids = list(event.frame_ids)
             event.observations = self.get_all_frames(frame_id_begin=frame_ids[0],
                                                      frame_id_end=frame_ids[len(
