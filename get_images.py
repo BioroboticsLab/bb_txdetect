@@ -6,6 +6,7 @@ from scipy.ndimage.interpolation import rotate
 from scipy.misc import imsave
 import numpy as np
 from map_data import Observation
+from time import sleep
 
 FINAL_SIZE = 128
 SIZE_BEFORE_ROTATION = math.ceil(FINAL_SIZE * math.sqrt(2))
@@ -59,7 +60,7 @@ def save_images(observations: [Observation], index: int):
         os.mkdir(IMAGE_FOLDER)
 
     if os.path.isdir(folder):
-        raise NameError("folder path for saving images already exists: {}".format(folder))
+        raise Exception("folder path for saving images already exists: {}".format(folder))
 
     os.mkdir(folder)
 
@@ -71,8 +72,16 @@ def save_images(observations: [Observation], index: int):
 
         crop_coordinates = get_crop_coordinates(obs.xs[0], obs.ys[0], 
                                                 obs.xs[1], obs.ys[1])
-        image = get_frame_plotter(obs=obs, decode_n_frames=decode_n_frames, 
-                                  crop_coordinates=crop_coordinates).get_image()
+        fp = get_frame_plotter(obs=obs, decode_n_frames=decode_n_frames, 
+                               crop_coordinates=crop_coordinates)
+        done = False
+        while not done:
+            try:
+                image = fp.get_image()
+                done = True
+            except Exception:
+                print(str(datetime.datetime.now()), "Exception in fp.get_image()")
+                sleep(60)
 
         save(hide_tags=False)
         save(hide_tags=True)
