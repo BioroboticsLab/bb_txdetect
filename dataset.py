@@ -2,6 +2,7 @@ from random import random
 from glob import glob
 from typing import List
 import numpy as np
+import itertools
 
 import torchvision.transforms as transforms
 from torch.utils.data.dataset import Dataset, Subset
@@ -13,11 +14,23 @@ class TrophallaxisDataset(Dataset):
         self.transformations = transform if transform else transforms.Compose([transforms.ToTensor()])
         self.all_paths = sorted(glob("images/*/0/*.png"))
         self.item_depth = item_depth
-        self.y_indices = self.indices_by_label("y")
-        self.n_indices = self.indices_by_label("n")
+        self.y_indices = self._indices_by_label("y")
+        self.n_indices = self._indices_by_label("n")
         self.count = len(self.y_indices) + len(self.n_indices)
 
-    def indices_by_label(self, label: str) -> List[int]:
+        self.grouped_by_event = {}
+        self.event_labels = []
+        for i, path in enumerate(self.all_paths):
+            folder = self._folder_index(path)
+            if len(self.event_labels) <= folder:
+                self.event_labels.append(False)
+            if path[-5] == "y":
+                self.event_labels[-1] = True
+            if folder not in self.grouped_by_event:
+                self.grouped_by_event[folder] = []
+            self.grouped_by_event[folder].append(i)
+
+    def _indices_by_label(self, label: str) -> List[int]:
         return [i for i, x in enumerate(self.all_paths) if x[-5] == label]
 
     def __getitem__(self, index):
@@ -41,12 +54,39 @@ class TrophallaxisDataset(Dataset):
     def __len__(self):
         return self.count
 
-    def trainset(self, split_ratio=0.8):
-        n_indices = [x for i, x in enumerate(self.n_indices) if i/len(self.n_indices) < split_ratio]
-        y_indices = [x for i, x in enumerate(self.y_indices) if i/len(self.y_indices) < split_ratio]
-        return Subset(dataset=self, indices=[*n_indices, *y_indices])
+    def split_index(self, split_ratio: float, indices) -> int:
+        i = int(len(indices) * split_ratio)
+        return i - int(self.all_paths[i].split("/")[-1].split("_")[0])
 
-    def testset(self, split_ratio=0.8):
-        n_indices = [x for i, x in enumerate(self.n_indices) if i/len(self.n_indices) >= split_ratio]
-        y_indices = [x for i, x in enumerate(self.y_indices) if i/len(self.y_indices) >= split_ratio]
-        return Subset(dataset=self, indices=[*n_indices, *y_indices])
+    def _folder_index(self, path:str) -> int:
+        return int(path.split("/")[1].split("_")[0])
+
+    def _get_subset(self, split_ratio, train: bool) -> Subset:
+        y_events = [i for i,label in enumerate(self.event_labels) if label]
+        n_events = [i for i,label in enumerate(self.event_labels) if not label]
+
+        if train:
+            y_events = y_events[:int(len(y_events)*split_ratio)]
+            n_events = n_events[:int(len(n_events)*split_ratio)]
+        else:
+            y_events = y_events[int(len(y_events)*split_ratio):]
+            n_events = n_events[int(len(n_events)*split_ratio):]
+
+        print("ratio", len(y_events) / (len(y_events)+len(n_events)), "train" if train else "test")
+
+        indices = [self.grouped_by_event[i] for i in y_events]
+        indices += [self.grouped_by_event[i] for i in n_events]
+
+        return Subset(dataset=self, indices=list(itertools.chain.from_iterable(indices)))
+
+    def trainset(self, split_ratio=0.8) -> Subset:
+        return self._get_subset(split_ratio=split_ratio, train=True)
+
+    def testset(self, split_ratio=0.8) -> Subset:
+        return self._get_subset(split_ratio=split_ratio, train=False)
+
+    def subset_overlap(self, train: Subset, test: Subset) -> set:
+        train_folders = set([self._folder_index(self.all_paths[i]) for i in train.indices])
+        test_folders = set([self._folder_index(self.all_paths[i]) for i in test.indices])
+        return train_folders & test_folders
+
