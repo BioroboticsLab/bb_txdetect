@@ -24,18 +24,24 @@ class TrophallaxisDataset(Dataset):
             folder = self._folder_index(path)
             if len(self.event_labels) <= folder:
                 self.event_labels.append(False)
-            if path[-5] == "y":
+            label_str = path[-5]
+            if label_str == "y":
                 self.event_labels[-1] = True
             if folder not in self.grouped_by_event:
                 self.grouped_by_event[folder] = []
-            self.grouped_by_event[folder].append(i)
+            if label_str != "u":
+                self.grouped_by_event[folder].append(i)
 
     def _indices_by_label(self, label: str) -> List[int]:
         return [i for i, x in enumerate(self.all_paths) if x[-5] == label]
 
     def __getitem__(self, index):
         path = self.all_paths[index]
-        label = 1 if path[-5] == "y" else 0
+        label_str = path[-5]
+        if label_str == "u":
+            print(index, len(self.all_paths), self.item_depth, self.all_paths[index])
+        assert label_str != "u"
+        label = 1 if label_str == "y" else 0
         before = [self.all_paths[i-1] for i in range(index, index - self.item_depth//2, -1)]
         after = [self.all_paths[i+1] for i in range(index, index + self.item_depth//2)]
         paths = [*before, path, *after]
