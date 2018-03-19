@@ -6,6 +6,9 @@ core
 *.png
 *.npy
 __pycache__/
+images/
+data/
+saved_models/
 
 
 # Created by https://www.gitignore.io/api/vim
@@ -25,4 +28,3 @@ Session.vim
 tags
 
 # End of https://www.gitignore.io/api/vim
-data/
