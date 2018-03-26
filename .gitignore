@@ -9,6 +9,8 @@ __pycache__/
 images/
 data/
 saved_models/
+saved_model
+*.csv
 
 
 # Created by https://www.gitignore.io/api/vim
