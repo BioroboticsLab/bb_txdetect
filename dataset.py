@@ -59,7 +59,7 @@ class TrophallaxisDataset(Dataset):
         assert self.image_size[0] == self.image_size[1]
         assert self.image_size[0] <= 128
         if self.image_size[0] < 128:
-            images = [resize(img, self.image_size) for img in images]
+            images = [resize(img, self.image_size, mode="constant") for img in images]
         data = np.dstack(images) if len(images) > 1 else images[0]
         data = self.transformations(data)
         return (data, label)
