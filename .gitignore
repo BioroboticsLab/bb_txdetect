@@ -10,6 +10,7 @@ images/
 data/
 saved_models/
 saved_model
+best_model
 *.csv
 
 
