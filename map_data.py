@@ -87,10 +87,12 @@ class DataMapper:
     db = None
     hide_progress_bars = True
 
-    def __init__(self, path: str, hide_progress_bars=False):
+    def __init__(self, path=None, hide_progress_bars=False):
         setSnsStyle("ticks")
         self.hide_progress_bars = hide_progress_bars
         self.connect()
+        if not path:
+            return
         self.load_gt_data(path=path)
         frame_fc_map = self.get_frame_container_info_for_frames(list(self.get_all_frame_ids()))
         frame_to_fc_map = self.get_frame_to_fc_path_dict(frame_fc_map)

@@ -1,5 +1,6 @@
 from functools import reduce, partial
 from pathlib import Path
+from time import time
 
 import numpy as np
 import torch
@@ -11,7 +12,6 @@ from sklearn.metrics import f1_score, confusion_matrix
 
 import dataset
 import resnet
-import alexnet
 
 MODEL_PATH = "saved_model"
 BEST_MODEL_PATH = "best_model"
@@ -60,10 +60,11 @@ def format_stats(conmat: np.ndarray, *args) -> str:
 def run_training(model, optimizer, criterion, trainloader, testloader, start_epoch, start_score):
     run = partial(run_epoch, model=model, 
                   optimizer=optimizer, criterion=criterion)
+    tic = time()
     for epoch in range(start_epoch, 50):
-        print("train epoch", epoch)
+        print("epoch", epoch, "train", end=" ")
         out = "[" + format_stats(*run(loader=trainloader, train=True))
-        print("test epoch", epoch)
+        print("test", end=" ")
         conmat, score, loss = run(loader=testloader, train=False)
         out += "," + format_stats(conmat, score) + "]\n"
 
@@ -79,11 +80,14 @@ def run_training(model, optimizer, criterion, trainloader, testloader, start_epo
         if score > start_score:
             torch.save(state, BEST_MODEL_PATH)
         torch.save(state, MODEL_PATH)
+        toc = time()
+        print("time spent:", toc - tic, "sec")
+        tic = toc
 
 
-def restore(model, optimizer):
-    if Path(MODEL_PATH).exists():
-        state = torch.load(MODEL_PATH)
+def restore(model, optimizer, model_path=MODEL_PATH):
+    if Path(model_path).exists():
+        state = torch.load(model_path)
         model.load_state_dict(state["state_dict"])
         optimizer.load_state_dict(state["optimizer"])
         return state["epoch"] + 1, state["score"] if "score" in state else 0
@@ -92,7 +96,7 @@ def restore(model, optimizer):
 
 
 def main():
-    img_size = 64
+    img_size = 128
     item_depth = 17
     ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size))
     trainset = ds.trainset()
