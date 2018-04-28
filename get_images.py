@@ -1,23 +1,24 @@
 import math
 import os
 import datetime
-from bb_backend.api import FramePlotter
+from time import sleep
+from functools import reduce
 from scipy.ndimage.interpolation import rotate
 from scipy.misc import imsave
 import numpy as np
+from bb_backend.api import FramePlotter
 from map_data import Observation
-from time import sleep
 
+CROP_BORDER = 300
 FINAL_SIZE = 128
 SIZE_BEFORE_ROTATION = math.ceil(FINAL_SIZE * math.sqrt(2))
-IMAGE_FOLDER = "images"
+IMAGE_FOLDER = "images_v2"
 TAG_RADIUS = 22
 
 
-def get_crop_coordinates(x1: int, y1: int, x2: int, y2: int, size: int = SIZE_BEFORE_ROTATION):
-    xc = min(x1, x2) + abs(x1 - x2) // 2
-    yc = min(y1, y2) + abs(y1 - y2) // 2
-    return int(xc - size // 2), int(yc - size // 2), int(xc + size // 2 - 1), int(yc + size // 2 - 1)
+def get_crop_coordinates(x1: int, y1: int, x2: int, y2: int):
+    return int(min(x1,x2) - CROP_BORDER), int(min(y1,y2) - CROP_BORDER), \
+           int(max(x1,x2) + CROP_BORDER), int(max(y1,y2) + CROP_BORDER)
 
 
 def get_frame_plotter(obs: Observation, decode_n_frames: int, crop_coordinates: [int]) -> FramePlotter:
@@ -27,35 +28,32 @@ def get_frame_plotter(obs: Observation, decode_n_frames: int, crop_coordinates: 
                         decode_n_frames=decode_n_frames)
 
 
+class MetadataEntry(object):
+    def __init__(self, index, frame_id, xs, ys, orientations, label, offset):
+        self.index = index
+        self.frame_id = frame_id
+        self.x1 = xs[0]
+        self.x2 = xs[1]
+        self.y1 = ys[0]
+        self.y2 = ys[1]
+        self.orientation1 = orientations[0]
+        self.orientation2 = orientations[1]
+        self.offset_x = offset[0]
+        self.offset_y = offset[1]
+        self.label = label
+
+    @property
+    def csv_row(self):
+        return reduce(lambda a,b: str(a) + "," + str(b), 
+                      [self.index, self.label, self.frame_id, self.offset_x, self.offset_y, 
+                       self.x1, self.y1, self.x2, self.y2, self.orientation1, self.orientation2]) + "\n"
+
+    
+
 def save_images(observations: [Observation], index: int):
-    def save(hide_tags: bool):
-        if hide_tags:
-            x_offset = crop_coordinates[0]
-            y_offset = crop_coordinates[1]
-            for j in range(2):
-                x = obs.xs[j] - x_offset
-                y = obs.ys[j] - y_offset
-                hide_tag(image=image, x=x, y=y)
-        
-        for j in range(2):
-            if hide_tags:
-                subfolder = "{}/{}_hidden_tags".format(folder, j)
-            else:
-                subfolder = "{}/{}".format(folder, j)
-            if not os.path.isdir(subfolder):
-                os.mkdir(subfolder)
-            
-            imsave("{}/{:03}_{}.png".format(subfolder, i, obs.file_name), 
-                   crop_image(rotate_image(image, obs.orientations[j])))
+    folder_label = "y" if any(o.trophallaxis_observed for o in observations) else "n"
+    folder = "{}/{:05}_{}".format(IMAGE_FOLDER, index, folder_label)
 
-
-    first = observations[0]
-    last = observations[-1]
-    folder = "{}/{:05}_{}_{}_{}_{}_{}_{}".format(IMAGE_FOLDER,
-                                                 index,
-                                                 first.frame_id, last.frame_id,
-                                                 first.xs[0], last.xs[0],
-                                                 first.ys[0], last.ys[0])
     if not os.path.isdir(IMAGE_FOLDER):
         os.mkdir(IMAGE_FOLDER)
 
@@ -63,6 +61,8 @@ def save_images(observations: [Observation], index: int):
         raise Exception("folder path for saving images already exists: {}".format(folder))
 
     os.mkdir(folder)
+
+    metadata = "index,label,frame_id,offset_x,offset_y,x1,y1,x2,y2,orientation1,orientation2\n"
 
     for i, obs in enumerate(observations):
         if i == 0:
@@ -82,10 +82,15 @@ def save_images(observations: [Observation], index: int):
             except Exception:
                 print(str(datetime.datetime.now()), "Exception in fp.get_image()")
                 sleep(60)
+            
+        imsave("{}/{:03}_{}.png".format(folder, i, obs.label), image)
+        metadata += MetadataEntry(index=i, frame_id=obs.frame_id, xs=obs.xs, ys=obs.ys, 
+                                  orientations=obs.orientations, label=obs.label, 
+                                  offset=crop_coordinates[:2]).csv_row
 
-        save(hide_tags=False)
-        save(hide_tags=True)
-
+    with open(folder + "/metadata.csv", "w") as metadata_csv:
+        metadata_csv.write(metadata)
+        
     print(str(datetime.datetime.now()), "event", index, "complete")
     
 

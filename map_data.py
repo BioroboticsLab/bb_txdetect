@@ -49,18 +49,21 @@ class Observation(object):
         self.trophallaxis_observed = None
 
     @property
-    def file_name(self) -> str:
+    def label(self) -> str:
         if self.trophallaxis_observed is None:
-            label = "u"
+            return "u"
         elif self.trophallaxis_observed:
-            label = "y"
+            return "y"
         else:
-            label = "n"
+            return "n"
+
+    @property
+    def file_name(self) -> str:
         return "{}_{}_{}_{}_{}_{}_{}_{}".format(self.frame_id,
                                                 *self.xs,
                                                 *self.ys,
                                                 *[int((math.degrees(o) + 360) % 360) for o in self.orientations],
-                                                label)
+                                                self.label)
 
 
 def np_float_to_int(x: np.float) -> int:
@@ -87,7 +90,7 @@ class DataMapper:
     db = None
     hide_progress_bars = True
 
-    def __init__(self, path=None, hide_progress_bars=False):
+    def __init__(self, padding: int, path=None, hide_progress_bars=False):
         setSnsStyle("ticks")
         self.hide_progress_bars = hide_progress_bars
         self.connect()
@@ -98,7 +101,7 @@ class DataMapper:
         frame_to_fc_map = self.get_frame_to_fc_path_dict(frame_fc_map)
         self.map_additional_data_to_events(frame_to_fc_map)
         self.map_bee_ids()
-        self.map_observations(padding=8)
+        self.map_observations(padding=padding)
 
     def connect(self):
         self.db = psycopg2.connect(
