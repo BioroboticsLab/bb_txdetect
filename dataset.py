@@ -1,20 +1,24 @@
 import random
 from glob import glob
 from typing import List
-import numpy as np
 import itertools
+from time import time
 
+import numpy as np
+import pandas as pd
 import torchvision.transforms as transforms
 from torch.utils.data.dataset import Dataset, Subset
 from skimage.io import imread
 from skimage.transform import resize
+
+from rotation import rotation_horizontal, crop_centered_bee_left_edge
 
 
 class TrophallaxisDataset(Dataset):
     def __init__(self, item_depth: int, transform=None, image_size=(128,128), hide_tags=True):
         self.tags = "_hidden_tags" if hide_tags else ""
         self.transformations = transform if transform else transforms.Compose([transforms.ToTensor()])
-        self.all_paths = sorted(glob("images/*/0{}/*.png".format(self.tags)))
+        self.all_paths = sorted(glob("images_pad_0/*/*.png".format(self.tags)))
         self.item_depth = item_depth
         self.y_indices = self._indices_by_label("y")
         self.n_indices = self._indices_by_label("n")
@@ -34,34 +38,46 @@ class TrophallaxisDataset(Dataset):
                 self.grouped_by_event[folder] = []
             if label_str != "u":
                 self.grouped_by_event[folder].append(i)
-
+        
     def _indices_by_label(self, label: str) -> List[int]:
         return [i for i, x in enumerate(self.all_paths) if x[-5] == label]
 
     def __getitem__(self, index):
+        #print(index, end=";")
+        #tic = time()
         path = self.all_paths[index]
         label_str = path[-5]
-        if label_str == "u":
-            print(index, len(self.all_paths), self.item_depth, self.all_paths[index])
         assert label_str != "u"
         label = 1 if label_str == "y" else 0
         before = [self.all_paths[i-1] for i in range(index, index - self.item_depth//2, -1)]
         after = [self.all_paths[i+1] for i in range(index, index + self.item_depth//2)]
         paths = [*before, path, *after]
-
-        # randomly choose rotation
-        if random.random() > 0.5:
-            for i, p in enumerate(paths):
-                split = p.split("/0{}/".format(self.tags))
-                paths[i] = split[0] + "/1{}/".format(self.tags) + split[1]
-
+        #print(time() - tic, "intro", end=";")
+        #tic = time()
+        invert = random.random() > 0.5
+        if invert:
+            paths = [p.replace("images_pad_0","images_pad_0_invert") for p in paths]
         images = [imread(path) for path in paths]
+        #print(time() - tic, "imread", end=";")
+        #tic = time()
+        #images = [crop_centered_bee_left_edge(images[i]) for i, path in enumerate(paths)]
+        #print(time() - tic, "crop", end=";")
+        #tic = time()
+
+        assert images[0].shape[0] >= 32 and images[0].shape[1] >= 32
         assert self.image_size[0] == self.image_size[1]
         assert self.image_size[0] <= 128
         if self.image_size[0] < 128:
             images = [resize(img, self.image_size, mode="constant") for img in images]
-        data = np.dstack(images) if len(images) > 1 else images[0]
+        try:
+            data = np.dstack(images) if len(images) > 1 else images[0]
+        except ValueError:
+            print("ValueError", index, path)
+            for img in images:
+                print(img.shape, index)
+            raise
         data = self.transformations(data)
+        #print(time() - tic, "__getitem__ done")
         return (data, label)
 
     def __len__(self):

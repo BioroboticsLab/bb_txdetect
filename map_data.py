@@ -259,7 +259,7 @@ class DataMapper:
             for i, obs in enumerate(event.observations):
                 if i < padding or i >= len(event.observations) - padding:
                     obs.trophallaxis_observed = None
-                elif i >= event.begin_frame_idx and i <= event.end_frame_idx:
+                elif i >= event.begin_frame_idx + padding and i <= event.end_frame_idx + padding:
                     obs.trophallaxis_observed = True
                 else:
                     obs.trophallaxis_observed = False

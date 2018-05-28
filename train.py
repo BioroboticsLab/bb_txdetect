@@ -97,7 +97,7 @@ def restore(model, optimizer, model_path=MODEL_PATH):
 
 def main():
     img_size = 128
-    item_depth = 17
+    item_depth = 25
     ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size))
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,

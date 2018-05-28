@@ -12,7 +12,7 @@ from map_data import Observation
 CROP_BORDER = 300
 FINAL_SIZE = 128
 SIZE_BEFORE_ROTATION = math.ceil(FINAL_SIZE * math.sqrt(2))
-IMAGE_FOLDER = "images_v2"
+IMAGE_FOLDER = "images_v2_y_events"
 TAG_RADIUS = 22
 
 
@@ -53,6 +53,9 @@ class MetadataEntry(object):
 def save_images(observations: [Observation], index: int):
     folder_label = "y" if any(o.trophallaxis_observed for o in observations) else "n"
     folder = "{}/{:05}_{}".format(IMAGE_FOLDER, index, folder_label)
+
+    #print([x.label for x in observations])
+    #return
 
     if not os.path.isdir(IMAGE_FOLDER):
         os.mkdir(IMAGE_FOLDER)
