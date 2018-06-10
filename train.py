@@ -12,6 +12,7 @@ from sklearn.metrics import f1_score, confusion_matrix
 
 import dataset
 import resnet
+import smaller_net
 
 MODEL_PATH = "saved_model"
 BEST_MODEL_PATH = "best_model"
@@ -97,7 +98,7 @@ def restore(model, optimizer, model_path=MODEL_PATH):
 
 def main():
     img_size = 128
-    item_depth = 25
+    item_depth = 3
     ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size))
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
@@ -105,7 +106,8 @@ def main():
     testset = ds.testset()
     testloader = torch.utils.data.DataLoader(testset, batch_size=64,
                                              shuffle=False, num_workers=2)
-    model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
+    #model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
+    model = smaller_net.SmallerNet1(in_channels=item_depth)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -119,6 +121,25 @@ def main():
     print(model)
     print("starting training from epoch", epoch)
     run_training(model,optimizer,criterion,trainloader,testloader,epoch,score)
+
+
+def eval_untrained_model():
+    img_size = 128
+    item_depth = 3
+    ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size))
+    trainset = ds.trainset()
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
+                                              shuffle=True, num_workers=2)
+    testset = ds.testset()
+    testloader = torch.utils.data.DataLoader(testset, batch_size=64,
+                                             shuffle=False, num_workers=2)
+    model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+
+    model.cuda()
+    return run_epoch(model, optimizer, criterion, testloader, train=False)
 
 
 if __name__ == "__main__":
