@@ -107,7 +107,7 @@ def main():
     testloader = torch.utils.data.DataLoader(testset, batch_size=64,
                                              shuffle=False, num_workers=2)
     #model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
-    model = smaller_net.SmallerNet1(in_channels=item_depth)
+    model = smaller_net.SmallerNet3(in_channels=item_depth)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
