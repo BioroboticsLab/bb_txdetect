@@ -99,7 +99,8 @@ def restore(model, optimizer, model_path=MODEL_PATH):
 def main():
     img_size = 128
     item_depth = 3
-    ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size))
+    ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size),
+                                     random_crop_amplitude=8)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)
@@ -107,7 +108,7 @@ def main():
     testloader = torch.utils.data.DataLoader(testset, batch_size=64,
                                              shuffle=False, num_workers=2)
     #model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
-    model = smaller_net.SmallerNet3(in_channels=item_depth)
+    model = smaller_net.SmallerNet2(in_channels=item_depth)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)

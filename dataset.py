@@ -11,17 +11,19 @@ from skimage.io import imread
 from skimage.transform import resize
 import torch
 from tqdm import tqdm
+from rotation import crop_to_128
 
 
 class TrophallaxisDataset(Dataset):
-    def __init__(self, item_depth: int, transform=None, image_size=(128,128)):
+    def __init__(self, item_depth: int, transform=None, image_size=(128,128), random_crop_amplitude=0):
         self.transformations = transform if transform else transforms.Compose([transforms.ToTensor()])
-        self.all_paths = sorted(glob("images_pad_0/*/*.png"))
+        self.all_paths = sorted(glob("images_pad_16/*/*.png"))
         self.item_depth = item_depth
         self.y_indices = self._indices_by_label("y")
         self.n_indices = self._indices_by_label("n")
         self.count = len(self.y_indices) + len(self.n_indices)
         self.image_size = image_size
+        self.random_crop_amplitude = random_crop_amplitude
 
         self.grouped_by_event = {}
         self.event_labels = []
@@ -53,7 +55,15 @@ class TrophallaxisDataset(Dataset):
         if invert:
             paths = [p.replace("images_pad_0","images_pad_0_invert") for p in paths]
 
-        images = [imread(path) for path in paths]
+        if self.random_crop_amplitude > 0:
+            x = random.random() * self.random_crop_amplitude
+            x -= self.random_crop_amplitude/2
+            y = random.random() * self.random_crop_amplitude 
+            y -= self.random_crop_amplitude/2
+        else:
+            x = y = 0
+
+        images = [crop_to_128(imread(path), x, y) for path in paths]
 
         assert images[0].shape[0] >= 32 and images[0].shape[1] >= 32
         assert self.image_size[0] == self.image_size[1]
@@ -122,7 +132,8 @@ def shuffle(l: list, seed=42) -> list:
 def test_run():
     img_size = 128
     item_depth = 3
-    ds = TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size))
+    ds = TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size),
+                             random_crop_amplitude=8)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)
@@ -133,16 +144,13 @@ def test_run():
     tic = time()
     print("test")
     lab = []
-    ind = []
     for _ in range(3):
         labels = []
         indices = []
         for i, data in enumerate(tqdm(testloader, 0)):
             for label in data[1]:
                 labels.append(label)
-            for index in data[2]:
-                indices.append(index)
         lab.append(labels)
-        ind.append(indices)
     print("done after {} sec".format(time() - tic))
-    return ds, lab, ind
+    return ds, lab
+

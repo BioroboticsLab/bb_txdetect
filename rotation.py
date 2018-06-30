@@ -147,3 +147,16 @@ def _process(img, x1, y1, x2, y2, transformations, invert, debug=False):
     #print(time() - totaltic, "_process")
     return processed
 
+
+def crop_to_128(img, x=0, y=0):
+    """crop image to 128 x 128. x and y are values for offset from the center."""
+    padding = (img.shape[0] - 128)//2
+    x += padding
+    y += padding
+    x = round(x)
+    y = round(y)
+    shape = img[y:y+128, x:x+128].shape
+    #print(img.shape, x, y, shape)
+    assert shape[0] == 128 and shape[1] == 128
+    return img[y:y+128, x:x+128]
+
