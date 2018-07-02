@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from rotation import crop_to_128
 
+from skimage.exposure import equalize_adapthist
 
 class TrophallaxisDataset(Dataset):
     def __init__(self, item_depth: int, transform=None, image_size=(128,128), random_crop_amplitude=0):

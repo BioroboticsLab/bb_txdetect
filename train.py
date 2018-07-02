@@ -119,10 +119,11 @@ def main():
                                              shuffle=False, num_workers=2)
 
     #model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
-    model = smaller_net.SmallerNet2(in_channels=item_depth)
+    model = smaller_net.SmallerNet4(in_channels=item_depth)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    #optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = optim.Adam(model.parameters())
 
     epoch, score = restore(model,optimizer)
 
