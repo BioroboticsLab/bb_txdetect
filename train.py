@@ -58,7 +58,8 @@ def format_stats(conmat: np.ndarray, *args) -> str:
     return csv([*args, "[" + csv([int(x) for x in [*conmat[0], *conmat[1]]]) + "]"])
 
 
-def run_training(model, optimizer, criterion, trainloader, testloader, start_epoch, start_score):
+def run_training(model, optimizer, criterion, trainloader, testloader, 
+                 start_epoch, start_score, save_models=False):
     run = partial(run_epoch, model=model, 
                   optimizer=optimizer, criterion=criterion)
     tic = time()
@@ -78,9 +79,10 @@ def run_training(model, optimizer, criterion, trainloader, testloader, start_epo
             "optimizer": optimizer.state_dict(),
             "score" : score
         }
-        if score > start_score:
-            torch.save(state, BEST_MODEL_PATH)
-        torch.save(state, MODEL_PATH)
+        if save_models:
+            if score > start_score:
+                torch.save(state, BEST_MODEL_PATH)
+            torch.save(state, MODEL_PATH)
         toc = time()
         print("time spent:", toc - tic, "sec")
         tic = toc
@@ -99,14 +101,23 @@ def restore(model, optimizer, model_path=MODEL_PATH):
 def main():
     img_size = 128
     item_depth = 3
-    ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size),
-                                     random_crop_amplitude=8)
-    trainset = ds.trainset()
+    seed = 3
+    rca = 0
+
+    trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
+                                           image_size=(img_size,img_size),
+                                           random_crop_amplitude=rca).trainset(seed=seed)
+
+    testset = dataset.TrophallaxisDataset(item_depth=item_depth, 
+                                          image_size=(img_size,img_size),
+                                          random_crop_amplitude=0).testset(seed=seed)
+
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)
-    testset = ds.testset()
+
     testloader = torch.utils.data.DataLoader(testset, batch_size=64,
                                              shuffle=False, num_workers=2)
+
     #model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
     model = smaller_net.SmallerNet2(in_channels=item_depth)
 

@@ -5,12 +5,14 @@ import itertools
 from time import time
 
 import numpy as np
-import torchvision.transforms as transforms
-from torch.utils.data.dataset import Dataset, Subset
 from skimage.io import imread
 from skimage.transform import resize
+from sklearn.model_selection import train_test_split
 import torch
+from torch.utils.data.dataset import Dataset, Subset
+import torchvision.transforms as transforms
 from tqdm import tqdm
+
 from rotation import crop_to_128
 
 
@@ -84,23 +86,27 @@ class TrophallaxisDataset(Dataset):
     def __len__(self):
         return self.count
 
-    #def split_index(self, split_ratio: float, indices) -> int:
-    #    i = int(len(indices) * split_ratio)
-    #    return i - int(self.all_paths[i].split("/")[-1].split("_")[0])
-
-
-    def _get_subset(self, split_ratio: float, train: bool, validation_index: int) -> Subset:
+    def _get_subset(self, split_ratio: float, train: bool, seed: int) -> Subset:
         y_events = shuffle([i for i,label in enumerate(self.event_labels) if label])
         n_events = shuffle([i for i,label in enumerate(self.event_labels) if not label])
 
-        if train:
-            y_events = y_events[:int(len(y_events)*split_ratio)]
-            n_events = n_events[:int(len(n_events)*split_ratio)]
-        else:
-            y_events = y_events[int(len(y_events)*split_ratio):]
-            n_events = n_events[int(len(n_events)*split_ratio):]
+        y_split = train_test_split(y_events, random_state=seed, train_size=split_ratio)
+        n_split = train_test_split(n_events, random_state=seed, train_size=split_ratio)
 
-        print("ratio", len(y_events) / (len(y_events)+len(n_events)), "train" if train else "test")
+        y_events = y_split[0 if train else 1]
+        n_events = n_split[0 if train else 1]
+
+        #if train:
+        #    y_events = y_events[:int(len(y_events)*split_ratio)]
+        #    n_events = n_events[:int(len(n_events)*split_ratio)]
+        #else:
+        #    y_events = y_events[int(len(y_events)*split_ratio):]
+        #    n_events = n_events[int(len(n_events)*split_ratio):]
+
+        print("ratio:", len(y_events) / (len(y_events)+len(n_events)), 
+              "count:", (len(y_events)+len(n_events)),
+              "seed:", seed,
+              "train" if train else "test")
 
         events = shuffle([*y_events, *n_events])
 
@@ -108,11 +114,11 @@ class TrophallaxisDataset(Dataset):
 
         return Subset(dataset=self, indices=shuffle(list(itertools.chain.from_iterable(indices))))
 
-    def trainset(self, split_ratio=0.8, validation_index=1) -> Subset:
-        return self._get_subset(split_ratio=split_ratio, train=True, validation_index=validation_index)
+    def trainset(self, split_ratio=0.8, seed=42) -> Subset:
+        return self._get_subset(split_ratio=split_ratio, train=True, seed=seed)
 
-    def testset(self, split_ratio=0.8, validation_index=1) -> Subset:
-        return self._get_subset(split_ratio=split_ratio, train=False, validation_index=validation_index)
+    def testset(self, split_ratio=0.8, seed=42) -> Subset:
+        return self._get_subset(split_ratio=split_ratio, train=False, seed=seed)
 
     def subset_overlap(self, train: Subset, test: Subset) -> set:
         train_folders = set([_folder_index(self.all_paths[i]) for i in train.indices])
@@ -140,6 +146,9 @@ def test_run():
     testset = ds.testset()
     testloader = torch.utils.data.DataLoader(testset, batch_size=64,
                                              shuffle=False, num_workers=2)
+
+    assert len(ds.subset_overlap(train=trainset, test=testset)) == 0
+    print("no overlap")
 
     tic = time()
     print("test")
