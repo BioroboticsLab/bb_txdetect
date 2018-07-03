@@ -1,14 +1,17 @@
 from functools import reduce, partial
 from pathlib import Path
 from time import time
+import os
+import shutil
+import datetime
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
-import torchvision
 from sklearn.metrics import f1_score, confusion_matrix
+from tqdm import tqdm
 
 import dataset
 import resnet
@@ -17,8 +20,8 @@ import smaller_net
 MODEL_PATH = "saved_model"
 BEST_MODEL_PATH = "best_model"
 
-def run_epoch(model, optimizer, criterion, loader, train: bool):
-    if train:
+def _run_epoch(model, optimizer, criterion, loader, training: bool):
+    if training:
         model.train()
     else:
         model.eval()
@@ -28,13 +31,13 @@ def run_epoch(model, optimizer, criterion, loader, train: bool):
     y_true = []
     y_pred = []
     for i, data in enumerate(loader, 0):
-        inputs = Variable(data[0].cuda(), volatile=not train)
-        labels = Variable(data[1].cuda(), volatile=not train)
+        inputs = Variable(data[0].cuda(), volatile=not training)
+        labels = Variable(data[1].cuda(), volatile=not training)
         
         optimizer.zero_grad()
         outputs = model(inputs)
 
-        if train:
+        if training:
             batchloss = criterion(outputs, labels)
             batchloss.backward()
             optimizer.step()
@@ -50,25 +53,26 @@ def run_epoch(model, optimizer, criterion, loader, train: bool):
     return conmat, score, loss 
 
 
-def csv(vals: list) -> str:
+def _csv(vals: list) -> str:
     return reduce(lambda x,y: str(x) + "," + str(y), vals)
 
 
-def format_stats(conmat: np.ndarray, *args) -> str:
-    return csv([*args, "[" + csv([int(x) for x in [*conmat[0], *conmat[1]]]) + "]"])
+def _format_stats(conmat: np.ndarray, *args) -> str:
+    return _csv([*args, "[" + _csv([int(x) for x in [*conmat[0], *conmat[1]]]) + "]"])
 
 
-def run_training(model, optimizer, criterion, trainloader, testloader, 
+def _run_training(model, optimizer, criterion, trainloader, testloader, 
                  start_epoch, start_score, save_models=False):
-    run = partial(run_epoch, model=model, 
+    run = partial(_run_epoch, model=model, 
                   optimizer=optimizer, criterion=criterion)
     tic = time()
-    for epoch in range(start_epoch, 50):
-        print("epoch", epoch, "train", end=" ")
-        out = "[" + format_stats(*run(loader=trainloader, train=True))
-        print("test", end=" ")
-        conmat, score, loss = run(loader=testloader, train=False)
-        out += "," + format_stats(conmat, score) + "]\n"
+    for epoch in tqdm(range(start_epoch, 50)):
+        with open("trainlog.txt", "a") as log:
+            print("epoch", epoch, "train", end=" ", file=log)
+            out = "[" + _format_stats(*run(loader=trainloader, training=True))
+            print("test", end=" ", file=log)
+            conmat, score, _ = run(loader=testloader, training=False)
+            out += "," + _format_stats(conmat, score) + "]\n"
 
         with open("train_stats.csv", "a") as f:
             f.write(out)
@@ -84,26 +88,24 @@ def run_training(model, optimizer, criterion, trainloader, testloader,
                 torch.save(state, BEST_MODEL_PATH)
             torch.save(state, MODEL_PATH)
         toc = time()
-        print("time spent:", toc - tic, "sec")
+        with open("trainlog.txt", "a") as log:
+            print("time spent:", toc - tic, "sec", file=log)
         tic = toc
 
 
-def restore(model, optimizer, model_path=MODEL_PATH):
-    if Path(model_path).exists():
-        state = torch.load(model_path)
-        model.load_state_dict(state["state_dict"])
-        optimizer.load_state_dict(state["optimizer"])
-        return state["epoch"] + 1, state["score"] if "score" in state else 0
-    else:
+def _restore(model, optimizer, model_path=MODEL_PATH):
+    if not Path(model_path).exists():
         return 0, 0
 
+    state = torch.load(model_path)
+    model.load_state_dict(state["state_dict"])
+    optimizer.load_state_dict(state["optimizer"])
+    return state["epoch"] + 1, state["score"] if "score" in state else 0
 
-def main():
-    img_size = 128
-    item_depth = 3
-    seed = 3
-    rca = 0
 
+
+def train(seed, rca, item_depth, img_size = 128, auto_archive=True):
+    tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
                                            image_size=(img_size,img_size),
                                            random_crop_amplitude=rca).trainset(seed=seed)
@@ -125,15 +127,22 @@ def main():
     #optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
     optimizer = optim.Adam(model.parameters())
 
-    epoch, score = restore(model,optimizer)
+    epoch, score = _restore(model,optimizer)
 
     model.cuda()
-    print("img size:", img_size, "depth:", item_depth)
-    print(criterion)
-    print(optimizer)
-    print(model)
-    print("starting training from epoch", epoch)
-    run_training(model,optimizer,criterion,trainloader,testloader,epoch,score)
+    with open("trainlog.txt", "a") as log:
+        print("img size:", img_size, "depth:", item_depth, file=log)
+        print("seed:", seed, "rca:", rca, file=log)
+        print(criterion, file=log)
+        print(optimizer, file=log)
+        print(model, file=log)
+        print("starting training from epoch", epoch, file=log)
+    _run_training(model,optimizer,criterion,trainloader,testloader,epoch,score)
+    with open("trainlog.txt", "a") as log:
+        print(time() - tic, "sec spent in total", file=log)
+    if auto_archive:
+	    archive(net=type(model).__name__, size=img_size, depth=item_depth, seed=seed, rca=rca, version='2.1')
+
 
 
 def eval_untrained_model():
@@ -152,8 +161,22 @@ def eval_untrained_model():
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
     model.cuda()
-    return run_epoch(model, optimizer, criterion, testloader, train=False)
+    return _run_epoch(model, optimizer, criterion, testloader, training=False)
 
 
-if __name__ == "__main__":
-    main()
+def archive(net: str, size: int, depth: int, version: str, rca: int, seed: int):
+    version = version.replace('.', '-')
+    name = "{}_{}x{}_depth{}_v{}_rotation_shuffle_rca{}_seed{}".format(net, size, size, depth, 
+                                                                       version, rca, seed) 
+    now = datetime.datetime.now()
+    datestr = now.strftime('20%y-%m-%d-%H-%M')
+    name = datestr + "_" + name
+    
+    archive_path = "saved_models"
+    subfolder = "{}/{}/".format(archive_path, name)
+    os.mkdir(subfolder)
+    for filename in ["dataset.py", "resnet.py", "train.py", "rotation.py", "smaller_net.py"]:
+        shutil.copy(filename, subfolder)
+    for filename in ["train_stats.csv", "trainlog.txt"]:
+        os.rename(filename, "{}/{}".format(subfolder, filename)) 
+

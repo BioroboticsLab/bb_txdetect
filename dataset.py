@@ -104,10 +104,13 @@ class TrophallaxisDataset(Dataset):
         #    y_events = y_events[int(len(y_events)*split_ratio):]
         #    n_events = n_events[int(len(n_events)*split_ratio):]
 
-        print("ratio:", len(y_events) / (len(y_events)+len(n_events)), 
-              "count:", (len(y_events)+len(n_events)),
-              "seed:", seed,
-              "train" if train else "test")
+        
+        with open("trainlog.txt", "a") as log:
+            print("ratio:", len(y_events) / (len(y_events)+len(n_events)), 
+                  "count:", (len(y_events)+len(n_events)),
+                  "seed:", seed,
+                  "train" if train else "test",
+                  file=log)
 
         events = shuffle([*y_events, *n_events])
 
