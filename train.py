@@ -108,11 +108,13 @@ def train(seed, rca, item_depth, img_size = 128, auto_archive=True):
     tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
                                            image_size=(img_size,img_size),
-                                           random_crop_amplitude=rca).trainset(seed=seed)
+                                           random_crop_amplitude=rca, 
+                                           clahe=False).trainset(seed=seed)
 
     testset = dataset.TrophallaxisDataset(item_depth=item_depth, 
                                           image_size=(img_size,img_size),
-                                          random_crop_amplitude=0).testset(seed=seed)
+                                          random_crop_amplitude=0,
+                                          clahe=False).testset(seed=seed)
 
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)

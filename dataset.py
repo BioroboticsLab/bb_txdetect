@@ -17,10 +17,14 @@ from rotation import crop_to_128
 
 from skimage.exposure import equalize_adapthist
 
+IMG_FOLDER = "images_pad_16"
+
 class TrophallaxisDataset(Dataset):
-    def __init__(self, item_depth: int, transform=None, image_size=(128,128), random_crop_amplitude=0):
+    def __init__(self, item_depth: int, transform=None, image_size=(128,128), 
+                 random_crop_amplitude=0, clahe=True):
         self.transformations = transform if transform else transforms.Compose([transforms.ToTensor()])
-        self.all_paths = sorted(glob("images_pad_16/*/*.png"))
+        clahe_str = 'clahe' if clahe else ''
+        self.all_paths = sorted(glob(img_folder + clahe_str + "/*/*.png"))
         self.item_depth = item_depth
         self.y_indices = self._indices_by_label("y")
         self.n_indices = self._indices_by_label("n")
@@ -56,7 +60,7 @@ class TrophallaxisDataset(Dataset):
         paths = [*before, path, *after]
         invert = random.random() > 0.5
         if invert:
-            paths = [p.replace("images_pad_0","images_pad_0_invert") for p in paths]
+            paths = [p.replace(IMG_FOLDER, IMG_FOLDER + "_invert") for p in paths]
 
         if self.random_crop_amplitude > 0:
             x = random.random() * self.random_crop_amplitude
