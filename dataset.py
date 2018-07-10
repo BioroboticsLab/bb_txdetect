@@ -23,8 +23,8 @@ class TrophallaxisDataset(Dataset):
     def __init__(self, item_depth: int, transform=None, image_size=(128,128), 
                  random_crop_amplitude=0, clahe=True):
         self.transformations = transform if transform else transforms.Compose([transforms.ToTensor()])
-        clahe_str = 'clahe' if clahe else ''
-        self.all_paths = sorted(glob(img_folder + clahe_str + "/*/*.png"))
+        clahe_str = '_clahe' if clahe else ''
+        self.all_paths = sorted(glob(IMG_FOLDER + clahe_str + "/*/*.png"))
         self.item_depth = item_depth
         self.y_indices = self._indices_by_label("y")
         self.n_indices = self._indices_by_label("n")
@@ -61,6 +61,7 @@ class TrophallaxisDataset(Dataset):
         invert = random.random() > 0.5
         if invert:
             paths = [p.replace(IMG_FOLDER, IMG_FOLDER + "_invert") for p in paths]
+            assert '_invert' in paths[0]
 
         if self.random_crop_amplitude > 0:
             x = random.random() * self.random_crop_amplitude
@@ -143,11 +144,10 @@ def shuffle(l: list, seed=42) -> list:
     return random.sample(l, len(l))
 
 
-def test_run():
-    img_size = 128
-    item_depth = 3
+def test_run(img_size = 128, item_depth = 3, clahe=False):
+    
     ds = TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size),
-                             random_crop_amplitude=8)
+                             random_crop_amplitude=8, clahe=clahe)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)
