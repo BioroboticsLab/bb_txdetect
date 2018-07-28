@@ -12,25 +12,34 @@ import torch
 from torch.utils.data.dataset import Dataset, Subset
 import torchvision.transforms as transforms
 from tqdm import tqdm
+from scipy.ndimage.interpolation import rotate
 
 from rotation import crop_to_128
+from path_constants import TRAIN_LOG, IMG_FOLDER, CLAHE, INVERT, LABEL_YES, LABEL_NO, LABEL_UNKNOWN, DEBUG_LOG
 
 from skimage.exposure import equalize_adapthist
 
-IMG_FOLDER = "images_pad_16"
-
 class TrophallaxisDataset(Dataset):
     def __init__(self, item_depth: int, transform=None, image_size=(128,128), 
-                 random_crop_amplitude=0, clahe=True):
-        self.transformations = transform if transform else transforms.Compose([transforms.ToTensor()])
-        clahe_str = '_clahe' if clahe else ''
+                 random_crop_amplitude=0, clahe=False, random_rotation_max=0, log_path=TRAIN_LOG):
+
+        trans = []
+        if random_rotation_max > 0:
+            trans.append(transforms.transforms.ToPILImage())
+            trans.append(transforms.RandomRotation(random_rotation_max))
+        trans.append(transforms.ToTensor())
+        self.transformations = transform if transform else transforms.Compose(trans)
+
+        clahe_str = CLAHE if clahe else ''
         self.all_paths = sorted(glob(IMG_FOLDER + clahe_str + "/*/*.png"))
         self.item_depth = item_depth
-        self.y_indices = self._indices_by_label("y")
-        self.n_indices = self._indices_by_label("n")
+        self.y_indices = self._indices_by_label(LABEL_YES)
+        self.n_indices = self._indices_by_label(LABEL_NO)
         self.count = len(self.y_indices) + len(self.n_indices)
         self.image_size = image_size
         self.random_crop_amplitude = random_crop_amplitude
+        self.random_rotation_max = random_rotation_max
+        self.log_path = log_path
 
         self.grouped_by_event = {}
         self.event_labels = []
@@ -39,11 +48,11 @@ class TrophallaxisDataset(Dataset):
             if len(self.event_labels) <= folder:
                 self.event_labels.append(False)
             label_str = path[-5]
-            if label_str == "y":
+            if label_str == LABEL_YES:
                 self.event_labels[-1] = True
             if folder not in self.grouped_by_event:
                 self.grouped_by_event[folder] = []
-            if label_str != "u":
+            if label_str != LABEL_UNKNOWN:
                 self.grouped_by_event[folder].append(i)
 
         
@@ -53,15 +62,22 @@ class TrophallaxisDataset(Dataset):
     def __getitem__(self, index):
         path = self.all_paths[index]
         label_str = path[-5]
-        assert label_str != "u"
-        label = 1 if label_str == "y" else 0
+        assert label_str != LABEL_UNKNOWN 
+        label = 1 if label_str == LABEL_YES else 0
+
         before = [self.all_paths[i-1] for i in range(index, index - self.item_depth//2, -1)]
         after = [self.all_paths[i+1] for i in range(index, index + self.item_depth//2)]
         paths = [*before, path, *after]
+
         invert = random.random() > 0.5
         if invert:
-            paths = [p.replace(IMG_FOLDER, IMG_FOLDER + "_invert") for p in paths]
-            assert '_invert' in paths[0]
+            paths = [p.replace(IMG_FOLDER, IMG_FOLDER + INVERT) for p in paths]
+            assert INVERT in paths[0]
+
+        #if self.random_rotation_max > 0:
+        #    angle = random.random() * self.random_rotation_max
+        #else:
+        #    angle = 0
 
         if self.random_crop_amplitude > 0:
             x = random.random() * self.random_crop_amplitude
@@ -71,7 +87,12 @@ class TrophallaxisDataset(Dataset):
         else:
             x = y = 0
 
-        images = [crop_to_128(imread(path), x, y) for path in paths]
+        #with open(DEBUG_LOG, "a") as log:
+        #    print("{}, {}, {}".format(x,y,self.random_crop_amplitude), file=log)
+
+        # img=np.pad(img, pad_width=400, mode='constant')
+        images = [crop_to_128(imread(path), 
+                              x=x, y=y) for path in paths]
 
         assert images[0].shape[0] >= 32 and images[0].shape[1] >= 32
         assert self.image_size[0] == self.image_size[1]
@@ -86,7 +107,9 @@ class TrophallaxisDataset(Dataset):
             for img in images:
                 print(img.shape, index)
             raise
-        data = self.transformations(data)
+        # TODO if this works, only skip totensor, not the other transformations
+        if self.item_depth > 1:
+            data = self.transformations(data)
         return (data, label)
 
     def __len__(self):
@@ -110,7 +133,7 @@ class TrophallaxisDataset(Dataset):
         #    n_events = n_events[int(len(n_events)*split_ratio):]
 
         
-        with open("trainlog.txt", "a") as log:
+        with open(self.log_path, "a") as log:
             print("ratio:", len(y_events) / (len(y_events)+len(n_events)), 
                   "count:", (len(y_events)+len(n_events)),
                   "seed:", seed,
@@ -144,10 +167,10 @@ def shuffle(l: list, seed=42) -> list:
     return random.sample(l, len(l))
 
 
-def test_run(img_size = 128, item_depth = 3, clahe=False):
+def test_run(img_size = 128, item_depth = 3, clahe=False, rca=8, random_rotation_max=0):
     
     ds = TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size),
-                             random_crop_amplitude=8, clahe=clahe)
+                             random_crop_amplitude=rca, clahe=clahe, random_rotation_max=0)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)
@@ -170,4 +193,3 @@ def test_run(img_size = 128, item_depth = 3, clahe=False):
         lab.append(labels)
     print("done after {} sec".format(time() - tic))
     return ds, lab
-
