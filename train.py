@@ -103,17 +103,15 @@ def _restore(model, optimizer, model_path=MODEL_PATH):
 
 
 
-def train(seed, rca, item_depth, img_size = 128, auto_archive=True, clahe=False, random_rotation_max=0, 
+def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation_max=0, 
           num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, network=None):
     tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
-                                           image_size=(img_size,img_size),
                                            random_crop_amplitude=rca, 
                                            clahe=clahe,
                                            random_rotation_max=random_rotation_max).trainset(seed=seed)
 
     testset = dataset.TrophallaxisDataset(item_depth=item_depth, 
-                                          image_size=(img_size,img_size),
                                           random_crop_amplitude=0,
                                           clahe=clahe,
                                           random_rotation_max=0).testset(seed=seed)

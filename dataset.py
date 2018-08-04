@@ -3,6 +3,7 @@ from glob import glob
 from typing import List
 import itertools
 from time import time
+import os
 
 import numpy as np
 from skimage.io import imread
@@ -20,23 +21,31 @@ from path_constants import TRAIN_LOG, IMG_FOLDER, CLAHE, INVERT, LABEL_YES, LABE
 from skimage.exposure import equalize_adapthist
 
 class TrophallaxisDataset(Dataset):
-    def __init__(self, item_depth: int, transform=None, image_size=(128,128), 
-                 random_crop_amplitude=0, clahe=False, random_rotation_max=0, log_path=TRAIN_LOG):
+    def __init__(self, item_depth: int,
+                 random_crop_amplitude: int, clahe: bool, random_rotation_max: int, 
+                 transform=None, log_path=TRAIN_LOG,
+                 always_rotate_to_first_bee=False):
 
         trans = []
-        if random_rotation_max > 0:
-            trans.append(transforms.transforms.ToPILImage())
-            trans.append(transforms.RandomRotation(random_rotation_max))
+        trans.append(transforms.transforms.ToPILImage())
+        trans.append(transforms.RandomRotation(degrees=random_rotation_max))
+        trans.append(transforms.CenterCrop(size=128 + random_crop_amplitude))
+        if random_crop_amplitude > 0:
+            trans.append(transforms.RandomCrop(size=128))
+            trans.append(transforms.CenterCrop(size=128))
         trans.append(transforms.ToTensor())
         self.transformations = transform if transform else transforms.Compose(trans)
 
-        clahe_str = CLAHE if clahe else ''
-        self.all_paths = sorted(glob(IMG_FOLDER + clahe_str + "/*/*.png"))
+        self.always_rotate_to_first_bee = always_rotate_to_first_bee
+
+        img_folder = IMG_FOLDER + CLAHE if clahe else IMG_FOLDER
+        assert os.path.isdir(img_folder), "image folder {} not found".format(img_folder)
+        self.all_paths = sorted(glob(img_folder + "/*/*.png"))
+
         self.item_depth = item_depth
         self.y_indices = self._indices_by_label(LABEL_YES)
         self.n_indices = self._indices_by_label(LABEL_NO)
         self.count = len(self.y_indices) + len(self.n_indices)
-        self.image_size = image_size
         self.random_crop_amplitude = random_crop_amplitude
         self.random_rotation_max = random_rotation_max
         self.log_path = log_path
@@ -69,37 +78,14 @@ class TrophallaxisDataset(Dataset):
         after = [self.all_paths[i+1] for i in range(index, index + self.item_depth//2)]
         paths = [*before, path, *after]
 
-        invert = random.random() > 0.5
-        if invert:
-            paths = [p.replace(IMG_FOLDER, IMG_FOLDER + INVERT) for p in paths]
-            assert INVERT in paths[0]
+        if not self.always_rotate_to_first_bee:
+            invert = random.random() > 0.5
+            if invert:
+                paths = [p.replace(IMG_FOLDER, IMG_FOLDER + INVERT) for p in paths]
+                assert INVERT in paths[0]
 
-        #if self.random_rotation_max > 0:
-        #    angle = random.random() * self.random_rotation_max
-        #else:
-        #    angle = 0
+        images = [imread(path) for path in paths]
 
-        if self.random_crop_amplitude > 0:
-            x = random.random() * self.random_crop_amplitude
-            x -= self.random_crop_amplitude/2
-            y = random.random() * self.random_crop_amplitude 
-            y -= self.random_crop_amplitude/2
-        else:
-            x = y = 0
-
-        #with open(DEBUG_LOG, "a") as log:
-        #    print("{}, {}, {}".format(x,y,self.random_crop_amplitude), file=log)
-
-        # img=np.pad(img, pad_width=400, mode='constant')
-        images = [crop_to_128(imread(path), 
-                              x=x, y=y) for path in paths]
-
-        assert images[0].shape[0] >= 32 and images[0].shape[1] >= 32
-        assert self.image_size[0] == self.image_size[1]
-        assert self.image_size[0] <= 128
-
-        if self.image_size[0] < 128:
-            images = [resize(img, self.image_size, mode="constant") for img in images]
         try:
             data = np.dstack(images) if len(images) > 1 else images[0]
         except ValueError:
@@ -107,9 +93,9 @@ class TrophallaxisDataset(Dataset):
             for img in images:
                 print(img.shape, index)
             raise
-        # TODO if this works, only skip totensor, not the other transformations
-        if self.item_depth > 1:
-            data = self.transformations(data)
+
+        data = self.transformations(data)
+
         return (data, label)
 
     def __len__(self):
@@ -124,14 +110,6 @@ class TrophallaxisDataset(Dataset):
 
         y_events = y_split[0 if train else 1]
         n_events = n_split[0 if train else 1]
-
-        #if train:
-        #    y_events = y_events[:int(len(y_events)*split_ratio)]
-        #    n_events = n_events[:int(len(n_events)*split_ratio)]
-        #else:
-        #    y_events = y_events[int(len(y_events)*split_ratio):]
-        #    n_events = n_events[int(len(n_events)*split_ratio):]
-
         
         with open(self.log_path, "a") as log:
             print("ratio:", len(y_events) / (len(y_events)+len(n_events)), 
@@ -167,9 +145,9 @@ def shuffle(l: list, seed=42) -> list:
     return random.sample(l, len(l))
 
 
-def test_run(img_size = 128, item_depth = 3, clahe=False, rca=8, random_rotation_max=0):
+def test_run(item_depth = 3, clahe=False, rca=8, random_rotation_max=0):
     
-    ds = TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size),
+    ds = TrophallaxisDataset(item_depth=item_depth, 
                              random_crop_amplitude=rca, clahe=clahe, random_rotation_max=0)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
