@@ -104,7 +104,7 @@ def _restore(model, optimizer, model_path=MODEL_PATH):
 
 
 def train(seed, rca, item_depth, img_size = 128, auto_archive=True, clahe=False, random_rotation_max=0, 
-          num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64):
+          num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, network=None):
     tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
                                            image_size=(img_size,img_size),
@@ -125,7 +125,10 @@ def train(seed, rca, item_depth, img_size = 128, auto_archive=True, clahe=False,
                                              shuffle=False, num_workers=2)
 
     #model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
-    model = smaller_net.SmallerNet4(in_channels=item_depth)
+    if network:
+        model = network(in_channels=item_depth)
+    else:
+        model = smaller_net.SmallerNet4(in_channels=item_depth)
 
     criterion = nn.CrossEntropyLoss()
     #optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
