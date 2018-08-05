@@ -104,7 +104,7 @@ def _restore(model, optimizer, model_path=MODEL_PATH):
 
 
 def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation_max=0, 
-          num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, network=None):
+          num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, network=None, version="2.2"):
     tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
                                            random_crop_amplitude=rca, 
@@ -122,7 +122,6 @@ def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                              shuffle=False, num_workers=2)
 
-    #model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
     if network:
         model = network(in_channels=item_depth)
     else:
@@ -136,7 +135,7 @@ def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation
 
     model.cuda()
     with open(log_path, "a") as log:
-        print("img size:", img_size, "depth:", item_depth, file=log)
+        print("depth:", item_depth, file=log)
         print("seed:", seed, "rca:", rca, file=log)
         print(criterion, file=log)
         print(optimizer, file=log)
@@ -156,11 +155,11 @@ def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation
         print(time() - tic, "sec spent in total", file=log)
     if auto_archive:
         archive(net=type(model).__name__, 
-                size=img_size, 
+                size=128, 
                 depth=item_depth, 
                 seed=seed, 
                 rca=rca, 
-                version='2.1', 
+                version=version, 
                 random_rotation_max=random_rotation_max)
 
 
@@ -168,7 +167,7 @@ def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation
 def eval_untrained_model():
     img_size = 128
     item_depth = 3
-    ds = dataset.TrophallaxisDataset(item_depth=item_depth, image_size=(img_size,img_size))
+    ds = dataset.TrophallaxisDataset(item_depth=item_depth)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)
