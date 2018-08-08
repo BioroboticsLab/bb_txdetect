@@ -1,6 +1,7 @@
 import math
 import json
 from typing import List, Dict
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -290,6 +291,11 @@ def get_all_frames(frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), 
                                   mode='around')
     frame_ids = [frame_id for (timestamp, frame_id, fc_id) in frames]
     interpolated = interpolate(frame_ids, bee_ids)
+
+    if np.isnan(interpolated.sum()):
+        warnings.warn("interpolation failed, skipped event.")
+        return []
+
     return [Observation(frame_id=frame_ids[i],
                         xs=(interpolated[i][0], interpolated[i][3]),
                         ys=(interpolated[i][1], interpolated[i][4]),
@@ -299,8 +305,7 @@ def interpolate(frame_ids, bee_ids) -> np.ndarray:
     results = np.empty((len(frame_ids), 6), dtype=np.float32)
     results[:, :] = np.nan
     for i, frame_id in enumerate(frame_ids):
-        detections = get_position_and_orientation(
-            frame_id=frame_id, bee_ids=bee_ids)
+        detections = get_position_and_orientation(frame_id=frame_id, bee_ids=bee_ids)
         for d in detections:
             if d[0] == bee_ids[0]:
                 results[i, :3] = [d[1], d[2], d[3]]

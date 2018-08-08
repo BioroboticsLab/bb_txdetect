@@ -13,6 +13,7 @@ saved_models/
 saved_model
 best_model
 *.csv
+candidates
 
 
 # Created by https://www.gitignore.io/api/vim
