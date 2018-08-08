@@ -167,7 +167,8 @@ def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation
 def eval_untrained_model():
     img_size = 128
     item_depth = 3
-    ds = dataset.TrophallaxisDataset(item_depth=item_depth)
+    ds = dataset.TrophallaxisDataset(item_depth=item_depth, random_crop_amplitude=0, 
+                                     clahe=False, random_rotation_max=0)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)

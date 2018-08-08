@@ -64,19 +64,19 @@ def fix_bee_to_corner(*args, **kwargs):
     and the other is on the top right, if the distance is small enough. 
     If the distance is higher, the 2nd bee will not be visible, but the first 
     is always in the bottom left. Returns the new image."""
-    def crop(img, x, y):
+    def crop(img, x, y, *args, **kwargs):
         h, w = img.shape
         x = w//2
         y = h//2
         return img[y-128:y, x:x+128]
 
 
-    def rotate_image(img, x1, y1, x2, y2, invert=False):
+    def rotate_image(img, x1, y1, x2, y2, *args, invert=False, **kwargs):
         angle = math.degrees(math.atan2(x2-x1, y2-y1))
         angle = -angle + 90 + 45
         return rotate(input=img, angle=angle, reshape=False)
 
-    return _process(*args, **kwargs, rotate_func=rotate_image, crop_func=crop)
+    return _process(*args, **kwargs, transformations=[center_bee, rotate_image, crop])
 
 
 def rotation_horizontal(*args, **kwargs):
@@ -130,21 +130,16 @@ def _process(img, x1, y1, x2, y2, transformations, invert, debug=False):
     if invert:
         x1, y1, x2, y2 = x2, y2, x1, y1
 
-    #totaltic = tic = time()
     def hide_tags(img, x, y, *args, **kwargs):
         """hide both tags"""
         hide_tag(img=img, x=x1, y=y1)
         hide_tag(img=img, x=x2, y=y2)
         return img
-    #print(time() - tic, end="s hide tag; ")
     processed = img
     transformations = [hide_tags, *transformations]
     for transform in transformations:
-        #tic = time()
         processed = transform(processed, x1, y1, x2, y2)
-        #print(time() - tic, "s", transform.__doc__[:8], end="; ")
         plot()
-    #print(time() - totaltic, "_process")
     return processed
 
 

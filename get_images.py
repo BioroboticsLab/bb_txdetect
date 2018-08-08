@@ -1,13 +1,15 @@
 import math
 import os
+import sys
 import datetime
 from time import sleep
 from functools import reduce
+from traceback import print_tb
 from scipy.ndimage.interpolation import rotate
 from scipy.misc import imsave
 import numpy as np
 from bb_backend.api import FramePlotter
-from map_data import Observation
+from load_data import Observation
 
 CROP_BORDER = 300
 FINAL_SIZE = 128
@@ -50,15 +52,15 @@ class MetadataEntry(object):
 
     
 
-def save_images(observations: [Observation], index: int):
+def save_images(observations: [Observation], index: int, image_folder=IMAGE_FOLDER):
     folder_label = "y" if any(o.trophallaxis_observed for o in observations) else "n"
-    folder = "{}/{:05}_{}".format(IMAGE_FOLDER, index, folder_label)
+    folder = "{}/{:05}_{}".format(image_folder, index, folder_label)
 
     #print([x.label for x in observations])
     #return
 
-    if not os.path.isdir(IMAGE_FOLDER):
-        os.mkdir(IMAGE_FOLDER)
+    if not os.path.isdir(image_folder):
+        os.mkdir(image_folder)
 
     if os.path.isdir(folder):
         raise Exception("folder path for saving images already exists: {}".format(folder))
@@ -83,8 +85,13 @@ def save_images(observations: [Observation], index: int):
                 image = fp.get_image()
                 done = True
             except Exception:
-                print(str(datetime.datetime.now()), "Exception in fp.get_image()")
-                sleep(60)
+                sleep_time = 60
+                print_tb(sys.exc_info()[2])
+                print(sys.exc_info()[1])
+                print("data:", fp.to_json())
+                print(str(datetime.datetime.now()), 
+                      "Exception in fp.get_image(), will automatically retry in {} sec".format(sleep_time))
+                sleep(sleep_time)
             
         imsave("{}/{:03}_{}.png".format(folder, i, obs.label), image)
         metadata += MetadataEntry(index=i, frame_id=obs.frame_id, xs=obs.xs, ys=obs.ys, 
