@@ -13,18 +13,16 @@ import torch
 from torch.utils.data.dataset import Dataset, Subset
 import torchvision.transforms as transforms
 from tqdm import tqdm
-from scipy.ndimage.interpolation import rotate
 
 from rotation import crop_to_128
 from path_constants import TRAIN_LOG, IMG_FOLDER, CLAHE, INVERT, LABEL_YES, LABEL_NO, LABEL_UNKNOWN, DEBUG_LOG
-
-from skimage.exposure import equalize_adapthist
+    
 
 class TrophallaxisDataset(Dataset):
     def __init__(self, item_depth: int,
                  random_crop_amplitude: int, clahe: bool, random_rotation_max: int, 
                  transform=None, log_path=TRAIN_LOG,
-                 always_rotate_to_first_bee=False):
+                 always_rotate_to_first_bee=False, img_folder=IMG_FOLDER, validation=False):
 
         trans = []
         trans.append(transforms.transforms.ToPILImage())
@@ -38,7 +36,8 @@ class TrophallaxisDataset(Dataset):
 
         self.always_rotate_to_first_bee = always_rotate_to_first_bee
 
-        img_folder = IMG_FOLDER + CLAHE if clahe else IMG_FOLDER
+        if clahe:
+            img_folder += CLAHE
         assert os.path.isdir(img_folder), "image folder {} not found".format(img_folder)
         self.all_paths = sorted(glob(img_folder + "/*/*.png"))
 
@@ -49,6 +48,7 @@ class TrophallaxisDataset(Dataset):
         self.random_crop_amplitude = random_crop_amplitude
         self.random_rotation_max = random_rotation_max
         self.log_path = log_path
+        self.validation = validation
 
         self.grouped_by_event = {}
         self.event_labels = []
@@ -71,7 +71,7 @@ class TrophallaxisDataset(Dataset):
     def __getitem__(self, index):
         path = self.all_paths[index]
         label_str = path[-5]
-        assert label_str != LABEL_UNKNOWN 
+        assert self.validation or label_str != LABEL_UNKNOWN, "requested item has label {}".format(LABEL_UNKNOWN)
         label = 1 if label_str == LABEL_YES else 0
 
         before = [self.all_paths[i-1] for i in range(index, index - self.item_depth//2, -1)]
@@ -134,6 +134,13 @@ class TrophallaxisDataset(Dataset):
         train_folders = set([_folder_index(self.all_paths[i]) for i in train.indices])
         test_folders = set([_folder_index(self.all_paths[i]) for i in test.indices])
         return train_folders & test_folders
+
+
+class ValidationSet(TrophallaxisDataset):
+    def __init__(self, item_depth: int, img_folder: str):
+        super(ValidationSet, self).__init__(item_depth=item_depth, random_crop_amplitude=0, 
+                                            clahe=False, random_rotation_max=0, 
+                                            img_folder=img_folder, validation=True)
 
 
 def _folder_index(path:str) -> int:

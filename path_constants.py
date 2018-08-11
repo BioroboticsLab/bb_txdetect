@@ -1,4 +1,6 @@
 IMG_FOLDER = "images_pad_16"
+CANDIDATES_JSON_PATH = "/mnt/storage/david/cache/beesbook/trophallaxis/candidate_events.json"
+CANDIDATES_IMAGE_FOLDER_RAW = "candidates"
 
 ARCHIVE_PATH = "saved_models"
 MODEL_PATH = "saved_model"
