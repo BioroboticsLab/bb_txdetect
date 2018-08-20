@@ -101,7 +101,7 @@ def save_images(observations: [Observation], index: int, image_folder=IMAGE_FOLD
     with open(folder + "/metadata.csv", "w") as metadata_csv:
         metadata_csv.write(metadata)
         
-    print(str(datetime.datetime.now()), "event", index, "complete")
+    #print(str(datetime.datetime.now()), "event", index, "complete")
     
 
 def rotate_image(image: np.ndarray, bee_orientation: float) -> np.ndarray:

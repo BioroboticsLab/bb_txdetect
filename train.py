@@ -61,7 +61,7 @@ def _format_stats(conmat: np.ndarray, *args) -> str:
 
 
 def _run_training(model, optimizer, criterion, trainloader, testloader, 
-                 start_epoch, start_score, save_models=False, num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS):
+                 start_epoch, start_score, save_last_model=False, num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS):
     tic = time()
     for epoch in tqdm(range(start_epoch, num_epochs)):
         with open(log_path, "a") as log:
@@ -82,14 +82,12 @@ def _run_training(model, optimizer, criterion, trainloader, testloader,
             "optimizer": optimizer.state_dict(),
             "score" : score
         }
-        if save_models:
-            if score > start_score:
-                torch.save(state, BEST_MODEL_PATH)
-            torch.save(state, MODEL_PATH)
         toc = time()
         with open(log_path, "a") as log:
             print("time spent:", toc - tic, "sec", file=log)
         tic = toc
+    if save_last_model:
+        torch.save(state, MODEL_PATH)
 
 
 def _restore(model, optimizer, model_path=MODEL_PATH):
@@ -103,18 +101,25 @@ def _restore(model, optimizer, model_path=MODEL_PATH):
 
 
 
-def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation_max=0, 
-          num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, network=None, version="2.2"):
+def train(seed, rca, item_depth,
+          drop_frames_around_trophallaxis: bool,
+          auto_archive=True, clahe=False, random_rotation_max=0, 
+          num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, 
+          network:nn.Module=None, version="2.3", save_last_model=False):
+
     tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
                                            random_crop_amplitude=rca, 
                                            clahe=clahe,
+                                           drop_frames_around_trophallaxis=drop_frames_around_trophallaxis,
                                            random_rotation_max=random_rotation_max).trainset(seed=seed)
 
     testset = dataset.TrophallaxisDataset(item_depth=item_depth, 
                                           random_crop_amplitude=0,
                                           clahe=clahe,
-                                          random_rotation_max=0).testset(seed=seed)
+                                          drop_frames_around_trophallaxis=drop_frames_around_trophallaxis,
+                                          random_rotation_max=0,
+                                          always_rotate_to_first_bee=True).testset(seed=seed)
 
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                               shuffle=True, num_workers=2)
@@ -150,17 +155,19 @@ def train(seed, rca, item_depth, auto_archive=True, clahe=False, random_rotation
                   start_score=score,
                   num_epochs=num_epochs,
                   log_path=log_path,
-                  stats_path=stats_path)
+                  stats_path=stats_path,
+                  save_last_model=save_last_model)
     with open(log_path, "a") as log:
         print(time() - tic, "sec spent in total", file=log)
     if auto_archive:
-        archive(net=type(model).__name__, 
+        archive(net=type(model).__name__.replace("_", "-"), 
                 size=128, 
                 depth=item_depth, 
                 seed=seed, 
                 rca=rca, 
                 version=version, 
-                random_rotation_max=random_rotation_max)
+                random_rotation_max=random_rotation_max,
+                drop_frames_around_trophallaxis=drop_frames_around_trophallaxis)
 
 
 
@@ -184,11 +191,12 @@ def eval_untrained_model():
     return _run_epoch(model, optimizer, criterion, testloader, training=False)
 
 
-def archive(net: str, size: int, depth: int, version: str, rca: int, seed: int, random_rotation_max: int):
+def archive(net: str, size: int, depth: int, version: str, rca: int, seed: int, random_rotation_max: int, drop_frames_around_trophallaxis: bool):
     version = version.replace('.', '-')
-    name = "{}_{}x{}_depth{}_v{}_rotation_shuffle_rca{}_seed{}_maxangle{}".format(net, size, size, depth, 
+    name = "{}_{}x{}_depth{}_v{}_rotation_shuffle_rca{}_seed{}_maxangle{}_drop{}".format(net, size, size, depth, 
                                                                                   version, rca, seed, 
-                                                                                  random_rotation_max) 
+                                                                                  random_rotation_max,
+                                                                                  "all" if drop_frames_around_trophallaxis else "0") 
     now = datetime.datetime.now()
     datestr = now.strftime('20%y-%m-%d-%H-%M')
     name = datestr + "_" + name

@@ -12,6 +12,7 @@ DEBUG_LOG = "debug.txt"
 
 CLAHE = "_clahe"
 INVERT = "_invert"
+PAD = "_pad_"
 
 LABEL_YES = "y"
 LABEL_NO = "n"

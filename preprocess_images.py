@@ -1,12 +1,13 @@
 import os
 from glob import glob
 from pathlib import Path
-from rotation import rotation_horizontal, crop_centered_bee_left_edge
 import numpy as np
 from skimage.io import imread
 import matplotlib.pyplot as plt
 from scipy.misc import imsave
 from tqdm import tqdm
+from rotation import rotation_horizontal, crop_centered_bee_left_edge
+from path_constants import INVERT, PAD
 
 
 def _get_metadata(image_folder: str) -> [[dict]]:
@@ -59,19 +60,19 @@ def _crop_and_rotate(metadata: [[dict]], padding: int, input_image_folder: str, 
     if not Path(input_image_folder).is_dir():
         raise Exception("input image folder not found: {}".format(input_image_folder))
 
-    image_folder = "{}_pad{}".format(str(Path(input_image_folder)), padding)
+    output_image_folder = "{}{}{}".format(str(Path(input_image_folder)), PAD, padding)
 
     if invert:
-        image_folder += "_invert"
-    for path in tqdm(sorted(glob("{}/*/*.png".format(image_folder)))):
+        output_image_folder += INVERT
+    for path in tqdm(sorted(glob("{}/*/*.png".format(input_image_folder)))):
         img = imread(path)
         coordinates = _get_coordinates(img=img, path=path, metadata=metadata)
         
         outimg = crop_centered_bee_left_edge(rotation_horizontal(img, *coordinates, invert=True), padding=16)
-        outpath = path.replace(input_image_folder, image_folder)
-        if not os.path.isdir(image_folder):
-            os.mkdir(image_folder)
-        subfolder = image_folder + "/" + outpath.split("/")[1]
+        outpath = path.replace(input_image_folder, output_image_folder)
+        if not os.path.isdir(output_image_folder):
+            os.mkdir(output_image_folder)
+        subfolder = output_image_folder + "/" + outpath.split("/")[1]
         if not os.path.isdir(subfolder):
             os.mkdir(subfolder)
         imsave(outpath, outimg)

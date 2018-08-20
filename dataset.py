@@ -21,6 +21,7 @@ from path_constants import TRAIN_LOG, IMG_FOLDER, CLAHE, INVERT, LABEL_YES, LABE
 class TrophallaxisDataset(Dataset):
     def __init__(self, item_depth: int,
                  random_crop_amplitude: int, clahe: bool, random_rotation_max: int, 
+                 drop_frames_around_trophallaxis: bool,
                  transform=None, log_path=TRAIN_LOG,
                  always_rotate_to_first_bee=False, img_folder=IMG_FOLDER, validation=False):
 
@@ -39,7 +40,11 @@ class TrophallaxisDataset(Dataset):
         if clahe:
             img_folder += CLAHE
         assert os.path.isdir(img_folder), "image folder {} not found".format(img_folder)
-        self.all_paths = sorted(glob(img_folder + "/*/*.png"))
+
+        if drop_frames_around_trophallaxis:
+            self.all_paths = sorted(glob(img_folder + "/*y*/*y*.png") + glob(img_folder + "/*n*/*.png"))
+        else:
+            self.all_paths = sorted(glob(img_folder + "/*/*.png"))
 
         self.item_depth = item_depth
         self.y_indices = self._indices_by_label(LABEL_YES)
@@ -95,8 +100,7 @@ class TrophallaxisDataset(Dataset):
             raise
 
         data = self.transformations(data)
-
-        return (data, label)
+        return (data, label, path)
 
     def __len__(self):
         return self.count
@@ -136,11 +140,22 @@ class TrophallaxisDataset(Dataset):
         return train_folders & test_folders
 
 
-class ValidationSet(TrophallaxisDataset):
+class ValidationSet(Subset):
     def __init__(self, item_depth: int, img_folder: str):
-        super(ValidationSet, self).__init__(item_depth=item_depth, random_crop_amplitude=0, 
-                                            clahe=False, random_rotation_max=0, 
-                                            img_folder=img_folder, validation=True)
+        dataset = TrophallaxisDataset(item_depth=item_depth, random_crop_amplitude=0, 
+                                      clahe=False, random_rotation_max=0, 
+                                      always_rotate_to_first_bee=True,
+                                      img_folder=img_folder, validation=True)
+
+        folders = sorted(glob("{}/*".format(img_folder)))
+        padding = len(glob("{}/*.png".format(folders[0]))) // 2
+        indices = []
+        for folder in folders:
+            images = sorted(glob("{}/*.png".format(folder)))
+            if len(images) == 2 * padding + 1:
+                indices.append(dataset.all_paths.index(images[padding]))
+
+        super(ValidationSet, self).__init__(dataset=dataset, indices=indices)
 
 
 def _folder_index(path:str) -> int:
@@ -173,6 +188,8 @@ def test_run(item_depth = 3, clahe=False, rca=8, random_rotation_max=0):
         labels = []
         indices = []
         for i, data in enumerate(tqdm(testloader, 0)):
+            print(data[0].size())
+            return
             for label in data[1]:
                 labels.append(label)
         lab.append(labels)
