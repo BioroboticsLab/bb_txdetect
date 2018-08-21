@@ -4,6 +4,7 @@ from time import time
 import os
 import shutil
 import datetime
+from warnings import warn
 
 import numpy as np
 import torch
@@ -99,6 +100,13 @@ def _restore(model, optimizer, model_path=MODEL_PATH):
     optimizer.load_state_dict(state["optimizer"])
     return state["epoch"] + 1, state["score"] if "score" in state else 0
 
+
+def cross_validate(num_runs=10, **kwargs):
+    if "seed" in kwargs:
+        warn("seed keyword is invalid, as it gets set automatically")
+        del kwargs["seed"]
+    for seed in range(num_runs):
+        train(seed=seed, **kwargs)
 
 
 def train(seed, rca, item_depth,
