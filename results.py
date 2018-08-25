@@ -1,4 +1,5 @@
 import json
+from warnings import warn
 import matplotlib.pyplot as plt
 from functools import reduce
 from glob import glob
@@ -139,3 +140,54 @@ def plot_experiment(experiment_id=None):
 def mean_std(df):
     return df.mean()['end score'], df.std()['end score']
 
+
+class CrossValidatedResult():
+    def __init__(self, version: str, crop: str, angle: str, drop: str, net: str):
+        self.version = version
+        self.crop = crop
+        self.angle = angle
+        self.drop = drop
+        self.net = net
+        
+        df = get_dataframe()
+        df = df[df["version"] == version]
+        df = df[df["rca"] == crop]
+        df = df[df["maxangle"] == angle]
+        df = df[df["drop"] == drop]
+        df = df[df["net"] == net]
+
+
+        self.valid = list(df["seed"]) == [str(i) for i in list(range(10))]
+
+        if not self.valid and len(df["seed"]) >= 10:
+            warn("skipped CrossValidatedResult because invalid seeds: {}".format(list(df["seed"])))
+            
+
+        self.mean, self.std = mean_std(df)
+        
+    def __repr__(self):
+        return "f1: {:.3}, std: {:.3}, v: {}, crop: {}, rotate: {:>2}, drop: {:>3}, net: {:3}".format(
+            self.mean, self.std, self.version, self.crop, self.angle, self.drop, self.net )
+
+
+def get_crossvalidation_results():
+    # TODO the values should be taken from df and not be hard coded
+    versions = ["2.2", "2.3"]
+    crops = ["0", "8"]
+    angles = ["0", "20"]
+    drops = ["0", "all"]
+    nets = ["4", "4.1"]
+    cv_results = []
+    for version in versions:
+        for crop in crops:
+            for angle in angles:
+                for drop in drops:
+                    for net in nets:
+                        cvr = CrossValidatedResult(version=version, 
+                                                   crop=crop,
+                                                   angle=angle,
+                                                   drop=drop,
+                                                   net=net)
+                        if cvr.valid:
+                            cv_results.append(cvr)
+    return sorted(cv_results, key=lambda a:a.mean)            
