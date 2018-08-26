@@ -180,3 +180,39 @@ class SmallerNet5(nn.Module):
         #print(x.shape)
         return x
 
+class SmallerNet6(nn.Module):
+    def __init__(self, in_channels: int, model_parameters: [int] = [10, 16, 32, 48, 64]):
+        super(SmallerNet6, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=model_parameters[0], kernel_size=5)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(self.conv1.out_channels, out_channels=model_parameters[1], kernel_size=5)
+        self.bn1 = nn.BatchNorm2d(self.conv2.out_channels)
+        self.conv3 = nn.Conv2d(in_channels=self.conv2.out_channels, out_channels=model_parameters[2], kernel_size=5)
+        self.bn2 = nn.BatchNorm2d(self.conv3.out_channels)
+        self.conv4 = nn.Conv2d(in_channels=self.conv3.out_channels, out_channels=model_parameters[3], kernel_size=5)
+        self.bn3 = nn.BatchNorm2d(self.conv4.out_channels)
+        self.conv5 = nn.Conv2d(in_channels=self.conv4.out_channels, out_channels=model_parameters[4], kernel_size=3)
+        self.fc1 = nn.Linear(in_features=self.conv5.out_channels, out_features=2)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        #print(x.shape)
+        x = self.pool(F.relu(self.conv2(x)))
+        #print(x.shape)
+        x = self.bn1(x)
+
+        x = self.pool(F.relu(self.conv3(x)))
+        #print(x.shape)
+        x = self.bn2(x)
+
+        x = self.pool(F.relu(self.conv4(x)))
+        #print(x.shape)
+        x = self.bn3(x)
+
+        x = self.pool(F.relu(self.conv5(x)))
+        #print(x.shape)
+
+        x = x.view(-1, self.fc1.in_features)
+        #print(x.shape)
+        x = self.fc1(x)
+        return x

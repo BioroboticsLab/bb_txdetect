@@ -145,7 +145,7 @@ class ValidationSet(Subset):
         dataset = TrophallaxisDataset(item_depth=item_depth, random_crop_amplitude=0, 
                                       clahe=False, random_rotation_max=0, 
                                       always_rotate_to_first_bee=True,
-                                      img_folder=img_folder, validation=True)
+                                      img_folder=img_folder, validation=True, drop_frames_around_trophallaxis="all")
 
         folders = sorted(glob("{}/*".format(img_folder)))
         padding = len(glob("{}/*.png".format(folders[0]))) // 2
@@ -170,7 +170,7 @@ def shuffle(l: list, seed=42) -> list:
 def test_run(item_depth = 3, clahe=False, rca=8, random_rotation_max=0):
     
     ds = TrophallaxisDataset(item_depth=item_depth, 
-                             random_crop_amplitude=rca, clahe=clahe, random_rotation_max=0)
+                             random_crop_amplitude=rca, clahe=clahe, random_rotation_max=0, drop_frames_around_trophallaxis=0)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)

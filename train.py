@@ -5,6 +5,7 @@ import os
 import shutil
 import datetime
 from warnings import warn
+import json
 
 import numpy as np
 import torch
@@ -65,14 +66,11 @@ def _run_training(model, optimizer, criterion, trainloader, testloader,
                  start_epoch, start_score, save_last_model=False, num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS):
     tic = time()
     for epoch in tqdm(range(start_epoch, num_epochs)):
-        with open(log_path, "a") as log:
-            print("epoch", epoch, "train", end=" ", file=log)
-            out = "[" + _format_stats(*_run_epoch(model=model, optimizer=optimizer, 
-                                                  criterion=criterion, loader=trainloader, training=True))
-            print("test", end=" ", file=log)
-            conmat, score, _ = _run_epoch(model=model, optimizer=optimizer, criterion=criterion, 
-                                          loader=testloader, training=False)
-            out += "," + _format_stats(conmat, score) + "]\n"
+        out = "[" + _format_stats(*_run_epoch(model=model, optimizer=optimizer, 
+                                              criterion=criterion, loader=trainloader, training=True))
+        conmat, score, _ = _run_epoch(model=model, optimizer=optimizer, criterion=criterion, 
+                                      loader=testloader, training=False)
+        out += "," + _format_stats(conmat, score) + "]\n"
 
         with open(stats_path, "a") as f:
             f.write(out)
@@ -112,8 +110,10 @@ def cross_validate(num_runs=10, **kwargs):
 def train(seed, rca, item_depth,
           drop_frames_around_trophallaxis: bool,
           auto_archive=True, clahe=False, random_rotation_max=0, 
+          model_parameters=None,
           num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, 
-          network:nn.Module=None, version="2.3", save_last_model=False):
+          network:nn.Module=None, version=2.3, save_last_model=False):
+
 
     tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
@@ -136,9 +136,13 @@ def train(seed, rca, item_depth,
                                              shuffle=False, num_workers=2)
 
     if network:
-        model = network(in_channels=item_depth)
+        if model_parameters:
+            model = network(in_channels=item_depth, model_parameters=model_parameters)
+        else:
+            model = network(in_channels=item_depth)
     else:
         model = smaller_net.SmallerNet4(in_channels=item_depth)
+
 
     criterion = nn.CrossEntropyLoss()
     #optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
@@ -147,13 +151,23 @@ def train(seed, rca, item_depth,
     epoch, score = _restore(model,optimizer)
 
     model.cuda()
-    with open(log_path, "a") as log:
-        print("depth:", item_depth, file=log)
-        print("seed:", seed, "rca:", rca, file=log)
-        print(criterion, file=log)
-        print(optimizer, file=log)
-        print(model, file=log)
-        print("starting training from epoch", epoch, file=log)
+
+    params = ExperimentParameters(net=type(model).__name__)
+    params.size = [128, 128]
+    params.num_channels = item_depth
+    params.seed = seed
+    params.rca = rca
+    params.version = version
+    params.maxangle = random_rotation_max
+    params.drop = "all" if drop_frames_around_trophallaxis else 0
+    params.model_parameters = model_parameters
+    params.num_epochs = num_epochs
+    params.clahe = clahe
+    params.criterion = type(criterion).__name__
+    params.optimizer = type(optimizer).__name__
+
+    params.write_file()
+
     _run_training(model=model,
                   optimizer=optimizer,
                   criterion=criterion,
@@ -167,23 +181,38 @@ def train(seed, rca, item_depth,
                   save_last_model=save_last_model)
     with open(log_path, "a") as log:
         print(time() - tic, "sec spent in total", file=log)
-    if auto_archive:
-        archive(net=type(model).__name__.replace("_", "-"), 
-                size=128, 
-                depth=item_depth, 
-                seed=seed, 
-                rca=rca, 
-                version=version, 
-                random_rotation_max=random_rotation_max,
-                drop_frames_around_trophallaxis=drop_frames_around_trophallaxis)
 
+
+    if auto_archive:
+        archive(params.date)
+
+
+class ExperimentParameters():
+    def __init__(self, net: str):
+        self.date = datetime.datetime.now().strftime('20%y-%m-%d-%H-%M')
+        self.net = float(net.replace("SmallerNet", "").replace("_","."))
+        self.net_classname = net
+
+    def write_file(self):        
+        with open("parameters.json", "w+") as f:
+            json.dump(self, fp=f, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+    
+
+def archive(date: str):
+    subfolder = Path(ARCHIVE_PATH) / date
+    subfolder.mkdir()
+
+    for filename in ["dataset.py", "resnet.py", "train.py", "rotation.py", "smaller_net.py"]:
+        shutil.copy(filename, str(subfolder))
+    for filename in ["train_stats.csv", "trainlog.txt", "parameters.json"]:
+        os.rename(filename, str(subfolder / filename))
 
 
 def eval_untrained_model():
     img_size = 128
     item_depth = 3
     ds = dataset.TrophallaxisDataset(item_depth=item_depth, random_crop_amplitude=0, 
-                                     clahe=False, random_rotation_max=0)
+                                     clahe=False, random_rotation_max=0, drop_frames_around_trophallaxis=0)
     trainset = ds.trainset()
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                               shuffle=True, num_workers=2)
@@ -197,22 +226,4 @@ def eval_untrained_model():
 
     model.cuda()
     return _run_epoch(model, optimizer, criterion, testloader, training=False)
-
-
-def archive(net: str, size: int, depth: int, version: str, rca: int, seed: int, random_rotation_max: int, drop_frames_around_trophallaxis: bool):
-    version = version.replace('.', '-')
-    name = "{}_{}x{}_depth{}_v{}_rotation_shuffle_rca{}_seed{}_maxangle{}_drop{}".format(net, size, size, depth, 
-                                                                                  version, rca, seed, 
-                                                                                  random_rotation_max,
-                                                                                  "all" if drop_frames_around_trophallaxis else "0") 
-    now = datetime.datetime.now()
-    datestr = now.strftime('20%y-%m-%d-%H-%M')
-    name = datestr + "_" + name
-    
-    subfolder = "{}/{}/".format(ARCHIVE_PATH, name)
-    os.mkdir(subfolder)
-    for filename in ["dataset.py", "resnet.py", "train.py", "rotation.py", "smaller_net.py"]:
-        shutil.copy(filename, subfolder)
-    for filename in ["train_stats.csv", "trainlog.txt"]:
-        os.rename(filename, "{}/{}".format(subfolder, filename)) 
 

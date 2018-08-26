@@ -3,6 +3,7 @@ from warnings import warn
 import matplotlib.pyplot as plt
 from functools import reduce
 from glob import glob
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from path_constants import ARCHIVE_PATH, TRAIN_STATS
@@ -12,6 +13,13 @@ class Experiment(object):
     def __init__(self, path=TRAIN_STATS, experiment_id=0):
         with open(path, "r") as f:
             stats = [json.loads(line) for line in f]
+
+        parameters_path = str(Path(path).parent / "parameters.json")
+        try:
+            with open(parameters_path, "r") as f:
+                self.parameters = json.load(f)
+        except FileNotFoundError:
+            warn("File: {} not found.".format(parameters_path))
 
         self.experiment_id = experiment_id
         self.path = path
@@ -39,93 +47,44 @@ class Experiment(object):
             ax.legend()
         plt.show()
     
-    def get_param(self, prefix: str, keep_prefix=False, default="0", replace_dash=False) -> str:
-        for p in self.params:
-            if prefix in p and p.index(prefix) == 0:
-                val = p if keep_prefix else p[len(prefix):]
-                return val.replace("-", ".") if replace_dash else val
-        return default
-        
-    @property
-    def name(self):
-        return reduce(lambda x,y:str(x) + " " + str(y), self.params)
-    
-    @property
-    def params(self):
-        return self.path.split("/")[1].split("_")
-    
-    @property
-    def date(self):
-        return self.get_param("20", keep_prefix=True)
-    
-    @property
-    def net(self):
-        net = self.get_param("SmallerNet", replace_dash=True)
-        if not net:
-            net = self.get_param("resnet")
-        assert net, "network parameter not found, new name may not be matched."
-        return net
-    
-    @property
-    def img_size(self):
-        return self.params[2]
-    
-    @property
-    def num_channels(self):
-        return self.get_param("depth")
-    
-    @property
-    def version(self):
-        return self.get_param("v", replace_dash=True)
-    
-    @property
-    def rca(self):
-        return self.get_param("rca")
-    
-    @property
-    def drop(self):
-        return self.get_param("drop")
-    
-    @property
-    def seed(self):
-        return self.get_param("seed", default=" ")
-    
-    @property
-    def maxangle(self):
-        return self.get_param("maxangle")
-    
 
 def _load_experiments(folder: str = ARCHIVE_PATH):
     paths = sorted(glob("{}/*/{}".format(folder, TRAIN_STATS)))
     experiments = [Experiment(path=path, experiment_id=i) for i, path in enumerate(paths)]
-    return [e for e in experiments if max(e.testscores) > 0 and "ignore" not in e.name]
+    return [e for e in experiments if max(e.testscores) > 0]
 
     
 def get_dataframe():
     experiments = _load_experiments()
-    data = { "date":[],  "net":[],  "channels":[],  "best epoch":[],  "end score":[], 
+    data = {"date":[],  "net":[],  "channels":[],  "best epoch":[],  "end score":[], 
             "end score train":[],  "version":[], "rca":[], "drop":[], "seed":[],
-            "experiment_id":[], "maxangle":[] }
+            "maxangle":[], "model_parameters":[] }
     for e in experiments:
-        data["date"].append(e.date)
-        data["net"].append(e.net)
-        data["channels"].append(e.num_channels)
         data["best epoch"].append(e.best_epoch)
         data["end score"].append(e.end_score_test)
         data["end score train"].append(e.end_score_train)
-        data["version"].append(e.version)
-        data["rca"].append(e.rca)
-        data["drop"].append(e.drop)
-        data["seed"].append(e.seed)
-        data["experiment_id"].append(e.experiment_id)
-        data["maxangle"].append(e.maxangle)
+        data["date"].append(e.parameters["date"])
+        data["net"].append(e.parameters["net"])
+        data["channels"].append(e.parameters["num_channels"])
+        data["version"].append(e.parameters["version"])
+        data["rca"].append(e.parameters["rca"])
+        data["drop"].append(e.parameters["drop"])
+        try:
+            data["seed"].append(e.parameters["seed"])
+        except KeyError:
+            data["seed"].append(-1)
+        data["maxangle"].append(e.parameters["maxangle"])
+        try:
+            data["model_parameters"].append(e.parameters["model_parameters"])
+        except KeyError:
+            data["model_parameters"].append([])
     return pd.DataFrame(data)
 
 
 def plot_experiment(experiment_id=None):
     if experiment_id:
         e = [x for x in _load_experiments() if x.experiment_id == experiment_id][0]
-        print('Experiment', experiment_id, e.name)
+        print('Experiment', experiment_id, e.parameters)
     else:
         try:
             e = Experiment()
@@ -157,7 +116,7 @@ class CrossValidatedResult():
         df = df[df["net"] == net]
 
 
-        self.valid = list(df["seed"]) == [str(i) for i in list(range(10))]
+        self.valid = list(df["seed"]) == [i for i in list(range(10))]
 
         if not self.valid and len(df["seed"]) >= 10:
             warn("skipped CrossValidatedResult because invalid seeds: {}".format(list(df["seed"])))
@@ -172,11 +131,11 @@ class CrossValidatedResult():
 
 def get_crossvalidation_results():
     # TODO the values should be taken from df and not be hard coded
-    versions = ["2.2", "2.3"]
-    crops = ["0", "8"]
-    angles = ["0", "20"]
-    drops = ["0", "all"]
-    nets = ["4", "4.1"]
+    versions = [2.2, 2.3]
+    crops = [0, 8]
+    angles = [0, 20]
+    drops = [0, "all"]
+    nets = [4.0, 4.1]
     cv_results = []
     for version in versions:
         for crop in crops:

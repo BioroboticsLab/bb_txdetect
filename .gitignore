@@ -15,6 +15,7 @@ best_model
 *.csv
 candidates*/
 validation_by_confidence/
+parameters.json
 
 
 # Created by https://www.gitignore.io/api/vim
