@@ -53,6 +53,7 @@ class MetadataEntry(object):
     
 
 def save_images(observations: [Observation], index: int, image_folder=IMAGE_FOLDER):
+    """Save an image for each Observation. The index is used for naming the folders."""
     folder_label = "y" if any(o.trophallaxis_observed for o in observations) else "n"
     folder = "{}/{:05}_{}".format(image_folder, index, folder_label)
 

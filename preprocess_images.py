@@ -78,9 +78,13 @@ def _crop_and_rotate(metadata: [[dict]], padding: int, input_image_folder: str, 
         imsave(outpath, outimg)
         
     
-def preprocess_images(image_folder: str, padding: int):
+def preprocess_images(image_folder: str, padding: int=16):
     """crop and rotate all images and save the processed images 
-    in two folders with the name {image_folder}_pad{padding}[_invert]"""
+    in two folders with the name {image_folder}_pad{padding}[_invert]
+    Args:
+        image_folder: input image path
+        padding: padding that is left around the image on each side.
+                 so e.g. 128x128 with padding 16 leads to 160x160"""
     metadata = _get_metadata(image_folder=image_folder)
     for invert in [True, False]:
         _crop_and_rotate(metadata=metadata, padding=padding, input_image_folder=image_folder, invert=invert)

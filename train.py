@@ -100,6 +100,7 @@ def _restore(model, optimizer, model_path=MODEL_PATH):
 
 
 def cross_validate(num_runs=10, **kwargs):
+    """run train num_runs times with different seeds for cross validation"""
     if "seed" in kwargs:
         warn("seed keyword is invalid, as it gets set automatically")
         del kwargs["seed"]
@@ -112,8 +113,22 @@ def train(seed, rca, item_depth,
           auto_archive=True, clahe=False, random_rotation_max=0, 
           model_parameters=None,
           num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, 
-          network:nn.Module=None, version=2.3, save_last_model=False):
-
+          network=None, save_last_model=False):
+    """
+    train a network, save stats, maybe save the model.
+    Args:
+        seed: determines which events go to test and which to train, for cross validaiton.
+        rca: random crop amplitude, amount of random crops, set to 0 to disable.
+        item_depth: how many images should the network see for each frame. 
+                    if set to 3 the net sees the center frame and one frame before and after.
+                    if item_depth is high, training takes longer.
+        drop_frames_around_trophallaxis: if true ignore all negative frames of all positive events.
+        auto_archive: if true the stats files get moved automatically to an archive folder
+        clahe: apply clahe on images
+        random_rotation_max: maximum angle of random rotations
+        model_parameters: for models that need additional parameters
+        network: class of network that should be used
+    """
 
     tic = time()
     trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
@@ -157,7 +172,7 @@ def train(seed, rca, item_depth,
     params.num_channels = item_depth
     params.seed = seed
     params.rca = rca
-    params.version = version
+    params.version = 2.3
     params.maxangle = random_rotation_max
     params.drop = "all" if drop_frames_around_trophallaxis else 0
     params.model_parameters = model_parameters
