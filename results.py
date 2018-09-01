@@ -46,14 +46,14 @@ class Experiment(object):
         for ax in axarr:
             ax.legend()
         plt.show()
-    
+
 
 def _load_experiments(folder: str = ARCHIVE_PATH):
     paths = sorted(glob("{}/*/{}".format(folder, TRAIN_STATS)))
     experiments = [Experiment(path=path, experiment_id=i) for i, path in enumerate(paths)]
     return [e for e in experiments if max(e.testscores) > 0]
 
-    
+
 def get_dataframe():
     experiments = _load_experiments()
     data = {"date":[],  "net":[],  "channels":[],  "best epoch":[],  "end score":[], 
@@ -107,7 +107,7 @@ class CrossValidatedResult():
         self.angle = angle
         self.drop = drop
         self.net = net
-        
+
         df = get_dataframe()
         df = df[df["version"] == version]
         df = df[df["rca"] == crop]
@@ -120,10 +120,10 @@ class CrossValidatedResult():
 
         if not self.valid and len(df["seed"]) >= 10:
             warn("skipped CrossValidatedResult because invalid seeds: {}".format(list(df["seed"])))
-            
+
 
         self.mean, self.std = mean_std(df)
-        
+
     def __repr__(self):
         return "f1: {:.3}, std: {:.3}, v: {}, crop: {}, rotate: {:>2}, drop: {:>3}, net: {:3}".format(
             self.mean, self.std, self.version, self.crop, self.angle, self.drop, self.net )
@@ -142,11 +142,11 @@ def get_crossvalidation_results():
             for angle in angles:
                 for drop in drops:
                     for net in nets:
-                        cvr = CrossValidatedResult(version=version, 
+                        cvr = CrossValidatedResult(version=version,
                                                    crop=crop,
                                                    angle=angle,
                                                    drop=drop,
                                                    net=net)
                         if cvr.valid:
                             cv_results.append(cvr)
-    return sorted(cv_results, key=lambda a:a.mean)            
+    return sorted(cv_results, key=lambda a:a.mean)
