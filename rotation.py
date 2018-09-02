@@ -3,24 +3,25 @@ from time import time
 import numpy as np
 from scipy.ndimage.interpolation import rotate
 
+
 def hide_tag(img, x, y):
     sy, sx = img.shape
     r = 22
-    b,a = np.ogrid[-y:sy-y, -x:sx-x]
+    b, a = np.ogrid[-y:sy-y, -x:sx-x]
     mask = a**2 + b**2 <= r**2
     img[mask] = 128
-    
+
 
 def hide_tag_debug(img, x, y, invert):
     sy, sx = img.shape
     r = 22
-    b,a = np.ogrid[-y:sy-y, -x:sx-x]
+    b, a = np.ogrid[-y:sy-y, -x:sx-x]
     mask = a**2 + b**2 <= r**2
-    img[y-r:y+r,x-r:x+r] = 64 if invert else 128
+    img[y-r:y+r, x-r:x+r] = 64 if invert else 128
     img[mask] = 128 if invert else 64
-    img[y,x] = 0
+    img[y, x] = 0
 
-    
+
 def center_bee(img, x, y, *args, **kwargs):
     """center one bee for easier rotation"""
     h, w = img.shape
@@ -33,7 +34,8 @@ def center_bee(img, x, y, *args, **kwargs):
     if any([pad > 1 for pad in [pad_top, pad_bottom, pad_left, pad_right]]):
         # bee is close to the edge
         # extend image with padding to keep minimum size
-        img = np.pad(img, ((pad_top, pad_bottom), (pad_left, pad_right)), 'constant', constant_values=0.5)
+        img = np.pad(img, ((pad_top, pad_bottom), (pad_left, pad_right)),
+                     'constant', constant_values=0.5)
         x += pad_left
         y += pad_top
         h, w = img.shape
@@ -51,32 +53,32 @@ def center_bee(img, x, y, *args, **kwargs):
         miny = 2*y-h
         maxy = h
     try:
-        assert maxx - minx >= 2 * MIN -2 and maxy - miny >= 2 * MIN -2
+        assert maxx - minx >= 2 * MIN - 2 and maxy - miny >= 2 * MIN - 2
     except AssertionError:
-        print(x, y, maxx, minx, maxy, miny, pad_top, pad_bottom, pad_left, pad_right)
+        print(x, y, maxx, minx, maxy, miny,
+              pad_top, pad_bottom, pad_left, pad_right)
         raise
     return img[miny:maxy, minx:maxx]
-        
 
 
 def fix_bee_to_corner(*args, **kwargs):
-    """Rotates and crops the image so that one bee is in the bottom left corner 
-    and the other is on the top right, if the distance is small enough. 
-    If the distance is higher, the 2nd bee will not be visible, but the first 
-    is always in the bottom left. Returns the new image."""
+    """Rotates and crops the image so that one bee is in the bottom left
+    corner and the other is on the top right, if the distance is small
+    enough. If the distance is higher, the 2nd bee will not be visible,
+    but the first is always in the bottom left. Returns the new image."""
     def crop(img, x, y, *args, **kwargs):
         h, w = img.shape
         x = w//2
         y = h//2
         return img[y-128:y, x:x+128]
 
-
     def rotate_image(img, x1, y1, x2, y2, *args, invert=False, **kwargs):
         angle = math.degrees(math.atan2(x2-x1, y2-y1))
         angle = -angle + 90 + 45
         return rotate(input=img, angle=angle, reshape=False)
 
-    return _process(*args, **kwargs, transformations=[center_bee, rotate_image, crop])
+    return _process(*args, **kwargs, transformations=[center_bee, rotate_image,
+                                                      crop])
 
 
 def rotation_horizontal(*args, **kwargs):
@@ -89,7 +91,8 @@ def rotation_horizontal(*args, **kwargs):
         angle = -angle + 90
         return rotate(input=img, angle=angle, reshape=False)
 
-    return _process(*args, **kwargs, transformations=[center_bee, rotate_image])
+    return _process(*args, **kwargs, transformations=[center_bee,
+                                                      rotate_image])
 
 
 def crop_centered_bee_left_edge(img, *args, padding=0, **kwargs):
@@ -100,7 +103,7 @@ def crop_centered_bee_left_edge(img, *args, padding=0, **kwargs):
     a = 128 + 2*padding
     offs = 22 - padding
     return img[y-a//2:y+a//2, x+offs:x+a+offs]
-    
+
 
 def _process(img, x1, y1, x2, y2, transformations, invert, debug=False):
     if debug:
@@ -108,8 +111,7 @@ def _process(img, x1, y1, x2, y2, transformations, invert, debug=False):
             import matplotlib.pyplot as plt
             total = len(transformations)
             num_rows = math.ceil(total / 3)
-            f, axes = plt.subplots(num_rows, 3, figsize=(18,6*total // 3))
-            #import pdb; pdb.set_trace()
+            f, axes = plt.subplots(num_rows, 3, figsize=(18, 6*total // 3))
             for i in range(total):
                 ax = axes[i//3][i % 3] if num_rows > 1 else axes[i]
                 title = transformations[i].__doc__
@@ -121,12 +123,13 @@ def _process(img, x1, y1, x2, y2, transformations, invert, debug=False):
                     plt.show()
                 yield
         plot_gen = debug_plot()
+
         def plot():
             next(plot_gen)
     else:
         def plot():
             pass
-        
+
     if invert:
         x1, y1, x2, y2 = x2, y2, x1, y1
 
@@ -144,11 +147,12 @@ def _process(img, x1, y1, x2, y2, transformations, invert, debug=False):
 
 
 def crop_to_128(img, x=0, y=0):
-    """crop image to 128 x 128. x and y are values for offset from the center."""
+    """crop image to 128 x 128.
+    x and y are values for offset from the center."""
     padding = (img.shape[0] - 128)//2
     x = round(padding + x)
     y = round(padding + y)
     cropped = img[y:y+128, x:x+128]
-    assert cropped.shape[0] == 128 and cropped.shape[1] == 128, "cropped too much, image shape too small"
+    assert cropped.shape[0] == 128 and cropped.shape[1] == 128, \
+        "cropped too much, image shape too small"
     return cropped
-

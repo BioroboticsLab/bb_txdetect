@@ -1,12 +1,10 @@
 import json
 from warnings import warn
 import matplotlib.pyplot as plt
-from functools import reduce
 from glob import glob
 from pathlib import Path
 import pandas as pd
-import numpy as np
-from path_constants import ARCHIVE_PATH, TRAIN_STATS
+from txdetect.path_constants import ARCHIVE_PATH, TRAIN_STATS
 
 
 class Experiment(object):
@@ -29,11 +27,15 @@ class Experiment(object):
         self.end_score_train = sum(self.trainscores[-3:])/3
         self.best_epoch = self.testscores.index(max(self.testscores))
         self.trainloss = [line[1] for line in stats]
-        self.false_predictions_train = [(line[2][1] + line[2][2]) / sum(line[2]) for line in stats]
-        self.false_predictions_test = [(line[4][1] + line[4][2]) / sum(line[4]) for line in stats]
+
+        self.false_predictions_train = [(line[2][1] + line[2][2])
+                                        / sum(line[2]) for line in stats]
+
+        self.false_predictions_test = [(line[4][1] + line[4][2])
+                                       / sum(line[4]) for line in stats]
 
     def plot(self):
-        f, axarr = plt.subplots(3, 1, figsize=(8,6), sharex=True)
+        f, axarr = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
         axarr[0].set_title("f1 score")
         axarr[0].plot(self.trainscores, label="train")
         axarr[0].plot(self.testscores, label="test")
@@ -49,16 +51,17 @@ class Experiment(object):
 
 
 def _load_experiments(folder: str = ARCHIVE_PATH):
-    paths = sorted(glob("{}/*/{}".format(folder, TRAIN_STATS)))
-    experiments = [Experiment(path=path, experiment_id=i) for i, path in enumerate(paths)]
+    paths = sorted(glob("{}/*/{}".format(folder, Path(TRAIN_STATS).name)))
+    experiments = [Experiment(path=path, experiment_id=i)
+                   for i, path in enumerate(paths)]
     return [e for e in experiments if max(e.testscores) > 0]
 
 
 def get_dataframe():
     experiments = _load_experiments()
-    data = {"date":[],  "net":[],  "channels":[],  "best epoch":[],  "end score":[], 
-            "end score train":[],  "version":[], "rca":[], "drop":[], "seed":[],
-            "maxangle":[], "model_parameters":[] }
+    data = {"date": [], "net": [], "channels": [], "best epoch": [],
+            "end score": [], "end score train": [], "version": [], "rca": [],
+            "drop": [], "seed": [], "maxangle": [], "model_parameters": []}
     for e in experiments:
         data["best epoch"].append(e.best_epoch)
         data["end score"].append(e.end_score_test)
@@ -83,7 +86,8 @@ def get_dataframe():
 
 def plot_experiment(experiment_id=None):
     if experiment_id:
-        e = [x for x in _load_experiments() if x.experiment_id == experiment_id][0]
+        e = [x for x in _load_experiments()
+             if x.experiment_id == experiment_id][0]
         print('Experiment', experiment_id, e.parameters)
     else:
         try:
@@ -91,7 +95,8 @@ def plot_experiment(experiment_id=None):
         except FileNotFoundError:
             print("no running experiment")
             return
-    print('testscore  last: {} best: {}'.format(e.end_score_test, max(e.testscores)))
+    print('testscore  last: {} best: {}'.format(e.end_score_test,
+          max(e.testscores)))
     print('trainscore last: {}'.format(e.end_score_train))
     e.plot()
 
@@ -101,7 +106,7 @@ def mean_std(df):
 
 
 class CrossValidatedResult():
-    def __init__(self, version: str, crop: str, angle: str, drop: str, net: str):
+    def __init__(self, version: str, crop: str, angle: str, drop, net: str):
         self.version = version
         self.crop = crop
         self.angle = angle
@@ -115,18 +120,19 @@ class CrossValidatedResult():
         df = df[df["drop"] == drop]
         df = df[df["net"] == net]
 
-
         self.valid = list(df["seed"]) == [i for i in list(range(10))]
 
         if not self.valid and len(df["seed"]) >= 10:
-            warn("skipped CrossValidatedResult because invalid seeds: {}".format(list(df["seed"])))
-
+            warn("skipped CrossValidatedResult because invalid seeds: {}"
+                 .format(list(df["seed"])))
 
         self.mean, self.std = mean_std(df)
 
     def __repr__(self):
-        return "f1: {:.3}, std: {:.3}, v: {}, crop: {}, rotate: {:>2}, drop: {:>3}, net: {:3}".format(
-            self.mean, self.std, self.version, self.crop, self.angle, self.drop, self.net )
+        return "f1: {:.3}, std: {:.3}, v: {}, crop: {}, " \
+            "rotate: {:>2}, drop: {:>3}, net: {:3}".format(
+                self.mean, self.std, self.version, self.crop,
+                self.angle, self.drop, self.net)
 
 
 def get_crossvalidation_results():
@@ -149,4 +155,4 @@ def get_crossvalidation_results():
                                                    net=net)
                         if cvr.valid:
                             cv_results.append(cvr)
-    return sorted(cv_results, key=lambda a:a.mean)
+    return sorted(cv_results, key=lambda a: a.mean)

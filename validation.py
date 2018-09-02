@@ -5,11 +5,11 @@ from torch.nn.functional import softmax
 from tqdm import tqdm
 import pandas as pd
 
-from path_constants import CANDIDATES_JSON_PATH, CANDIDATES_IMAGE_FOLDER_RAW, PAD, MODEL_PATH
-from dataset import ValidationSet
-from smaller_net import SmallerNet4, SmallerNet4_1
-from get_images import save_images
-from load_data import get_all_frames
+from txdetect.path_constants import CANDIDATES_JSON_PATH, CANDIDATES_IMAGE_FOLDER_RAW, PAD, MODEL_PATH
+from txdetect.dataset import ValidationSet
+from txdetect.smaller_net import SmallerNet4, SmallerNet4_1
+from txdetect.get_images import save_images
+from txdetect.load_data import get_all_frames
 
 
 def load_candidates(frame_padding_length: int = 20, json_file_path: str = CANDIDATES_JSON_PATH, output_folder: str = CANDIDATES_IMAGE_FOLDER_RAW):
@@ -23,13 +23,13 @@ def load_candidates(frame_padding_length: int = 20, json_file_path: str = CANDID
     for i, c in enumerate(tqdm(candidates)):
         frame_id = c[0]
         bee_ids = (c[1], c[2])
-        save_images(observations=get_all_frames(frame_id_begin=frame_id, 
-                                                frame_id_end=frame_id, 
-                                                bee_ids=bee_ids, 
-                                                frame_padding_length=frame_padding_length), 
+        save_images(observations=get_all_frames(frame_id_begin=frame_id,
+                                                frame_id_end=frame_id,
+                                                bee_ids=bee_ids,
+                                                frame_padding_length=frame_padding_length),
                     index=i,
                     image_folder=output_folder)
-        
+
 
 def validate(model_path: str, network: torch.nn.Module, item_depth: int, validation_set: ValidationSet, optimizer=None) -> pd.DataFrame:
     model = network(in_channels=item_depth)

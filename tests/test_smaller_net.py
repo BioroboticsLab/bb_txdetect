@@ -1,9 +1,8 @@
 import unittest
 import inspect
 import torch
-import smaller_net
-from dataset import TrophallaxisDataset
-import results
+from txdetect.dataset import TrophallaxisDataset
+from txdetect import smaller_net
 
 
 class SmallerNetTestCase(unittest.TestCase):
@@ -43,19 +42,4 @@ class SmallerNetTestCase(unittest.TestCase):
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
-
-
-class PlotStatsTestCase(unittest.TestCase):
-    def test_retrieve_old_experiments(self):
-        df = results.get_dataframe()
-        df = df[(df["version"] == 2.3)
-                &(df["rca"] == 0)
-                &(df["date"] <= '2018-08-21-11-03')
-                &(df["maxangle"] == 0)
-                &(df["drop"] == 0)
-                &(df["net"] == 4)]
-        self.assertEqual(len(df), 10)
-
-    def test_get_crossvalidation_results(self):
-        self.assertGreaterEqual(len(results.get_crossvalidation_results()), 7)
 

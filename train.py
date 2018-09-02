@@ -2,7 +2,6 @@ from functools import reduce
 from pathlib import Path
 from time import time
 import os
-import shutil
 import datetime
 from warnings import warn
 import json
@@ -16,9 +15,10 @@ from sklearn.metrics import f1_score, confusion_matrix
 from tqdm import tqdm
 
 import dataset
-import resnet
 import smaller_net
-from path_constants import TRAIN_LOG, DEBUG_LOG, MODEL_PATH, BEST_MODEL_PATH, TRAIN_STATS, ARCHIVE_PATH
+from path_constants import (TRAIN_LOG, MODEL_PATH, TRAIN_STATS,
+                            ARCHIVE_PATH, PARAMETERS_JSON)
+
 
 def _run_epoch(model, optimizer, criterion, loader, training: bool):
     if training:
@@ -33,7 +33,7 @@ def _run_epoch(model, optimizer, criterion, loader, training: bool):
     for i, data in enumerate(loader, 0):
         inputs = Variable(data[0].cuda(), volatile=not training)
         labels = Variable(data[1].cuda(), volatile=not training)
-        
+
         optimizer.zero_grad()
         outputs = model(inputs)
 
@@ -48,52 +48,57 @@ def _run_epoch(model, optimizer, criterion, loader, training: bool):
 
     score = f1_score(y_true=y_true, y_pred=y_pred)
     conmat = confusion_matrix(y_true=y_true, y_pred=y_pred)
-            
-    loss /= i
-    return conmat, score, loss 
 
+    loss /= i
+    return conmat, score, loss
 
 
 def _csv(vals: list) -> str:
-    return reduce(lambda x,y: str(x) + "," + str(y), vals)
+    return reduce(lambda x, y: str(x) + "," + str(y), vals)
 
 
 def _format_stats(conmat: np.ndarray, *args) -> str:
-    return _csv([*args, "[" + _csv([int(x) for x in [*conmat[0], *conmat[1]]]) + "]"])
+    return _csv([*args, "[" + _csv([int(x) for x in [*conmat[0],
+                                                     *conmat[1]]]) + "]"])
 
 
-def _run_training(model, optimizer, criterion, trainloader, testloader, 
-                 start_epoch, start_score, save_last_model=False, num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS):
+def _run_training(model, optimizer, criterion, trainloader, testloader,
+                  start_epoch, start_score, save_last_model=False,
+                  num_epochs=50):
     tic = time()
     for epoch in tqdm(range(start_epoch, num_epochs)):
-        out = "[" + _format_stats(*_run_epoch(model=model, optimizer=optimizer, 
-                                              criterion=criterion, loader=trainloader, training=True))
-        conmat, score, _ = _run_epoch(model=model, optimizer=optimizer, criterion=criterion, 
+        out = "[" + _format_stats(*_run_epoch(model=model,
+                                              optimizer=optimizer,
+                                              criterion=criterion,
+                                              loader=trainloader,
+                                              training=True))
+        conmat, score, _ = _run_epoch(model=model, optimizer=optimizer,
+                                      criterion=criterion,
                                       loader=testloader, training=False)
         out += "," + _format_stats(conmat, score) + "]\n"
 
-        with open(stats_path, "a") as f:
+        with open(TRAIN_STATS, "a") as f:
             f.write(out)
 
         state = {
             "epoch": epoch,
             "state_dict": model.state_dict(),
             "optimizer": optimizer.state_dict(),
-            "score" : score
+            "score": score
         }
         toc = time()
-        with open(log_path, "a") as log:
+        with open(TRAIN_LOG, "a") as log:
             print("time spent:", toc - tic, "sec", file=log)
         tic = toc
     if save_last_model:
         torch.save(state, MODEL_PATH)
 
 
-def _restore(model, optimizer, model_path=MODEL_PATH):
-    if not Path(model_path).exists():
+def _restore(model, optimizer):
+    if not Path(MODEL_PATH).exists():
         return 0, 0
 
-    state = torch.load(model_path)
+    state = torch.load(MODEL_PATH)
     model.load_state_dict(state["state_dict"])
     optimizer.load_state_dict(state["optimizer"])
     return state["epoch"] + 1, state["score"] if "score" in state else 0
@@ -110,20 +115,24 @@ def cross_validate(num_runs=10, **kwargs):
 
 def train(seed, rca, item_depth,
           drop_frames_around_trophallaxis: bool,
-          auto_archive=True, clahe=False, random_rotation_max=0, 
+          auto_archive=True, clahe=False, random_rotation_max=0,
           model_parameters=None,
-          num_epochs=50, log_path=TRAIN_LOG, stats_path=TRAIN_STATS, batch_size=64, 
+          num_epochs=50, batch_size=64,
           network=None, save_last_model=False):
     """
     train a network, save stats, maybe save the model.
     Args:
-        seed: determines which events go to test and which to train, for cross validaiton.
-        rca: random crop amplitude, amount of random crops, set to 0 to disable.
-        item_depth: how many images should the network see for each frame. 
-                    if set to 3 the net sees the center frame and one frame before and after.
-                    if item_depth is high, training takes longer.
-        drop_frames_around_trophallaxis: if true ignore all negative frames of all positive events.
-        auto_archive: if true the stats files get moved automatically to an archive folder
+        seed: determines which events go to test and which to train,
+                for cross validaiton.
+        rca: random crop amplitude, amount of random crops, set to 0 to disable
+        item_depth: how many images should the network see for each frame.
+                if set to 3 the net sees the center frame and one frame
+                before and after.
+                if item_depth is high, training takes longer.
+        drop_frames_around_trophallaxis: if true ignore all negative frames of
+                all positive events.
+        auto_archive: if true the stats files get moved automatically to an
+                archive folder
         clahe: apply clahe on images
         random_rotation_max: maximum angle of random rotations
         model_parameters: for models that need additional parameters
@@ -131,13 +140,13 @@ def train(seed, rca, item_depth,
     """
 
     tic = time()
-    trainset = dataset.TrophallaxisDataset(item_depth=item_depth, 
-                                           random_crop_amplitude=rca, 
+    trainset = dataset.TrophallaxisDataset(item_depth=item_depth,
+                                           random_crop_amplitude=rca,
                                            clahe=clahe,
                                            drop_frames_around_trophallaxis=drop_frames_around_trophallaxis,
                                            random_rotation_max=random_rotation_max).trainset(seed=seed)
 
-    testset = dataset.TrophallaxisDataset(item_depth=item_depth, 
+    testset = dataset.TrophallaxisDataset(item_depth=item_depth,
                                           random_crop_amplitude=0,
                                           clahe=clahe,
                                           drop_frames_around_trophallaxis=drop_frames_around_trophallaxis,
@@ -152,18 +161,18 @@ def train(seed, rca, item_depth,
 
     if network:
         if model_parameters:
-            model = network(in_channels=item_depth, model_parameters=model_parameters)
+            model = network(in_channels=item_depth,
+                            model_parameters=model_parameters)
         else:
             model = network(in_channels=item_depth)
     else:
         model = smaller_net.SmallerNet4(in_channels=item_depth)
 
-
     criterion = nn.CrossEntropyLoss()
-    #optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+#   optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
     optimizer = optim.Adam(model.parameters(), lr=0.001 * 64 / batch_size)
 
-    epoch, score = _restore(model,optimizer)
+    epoch, score = _restore(model, optimizer)
 
     model.cuda()
 
@@ -191,12 +200,9 @@ def train(seed, rca, item_depth,
                   start_epoch=epoch,
                   start_score=score,
                   num_epochs=num_epochs,
-                  log_path=log_path,
-                  stats_path=stats_path,
                   save_last_model=save_last_model)
-    with open(log_path, "a") as log:
+    with open(TRAIN_LOG, "a") as log:
         print(time() - tic, "sec spent in total", file=log)
-
 
     if auto_archive:
         archive(params.date)
@@ -205,40 +211,18 @@ def train(seed, rca, item_depth,
 class ExperimentParameters():
     def __init__(self, net: str):
         self.date = datetime.datetime.now().strftime('20%y-%m-%d-%H-%M')
-        self.net = float(net.replace("SmallerNet", "").replace("_","."))
+        self.net = float(net.replace("SmallerNet", "").replace("_", "."))
         self.net_classname = net
 
-    def write_file(self):        
-        with open("parameters.json", "w+") as f:
-            json.dump(self, fp=f, default=lambda o: o.__dict__, sort_keys=True, indent=4)
-    
+    def write_file(self):
+        with open(PARAMETERS_JSON, "w+") as f:
+            json.dump(self, fp=f, default=lambda o: o.__dict__,
+                      sort_keys=True, indent=4)
+
 
 def archive(date: str):
     subfolder = Path(ARCHIVE_PATH) / date
     subfolder.mkdir()
 
-    for filename in ["dataset.py", "resnet.py", "train.py", "rotation.py", "smaller_net.py"]:
-        shutil.copy(filename, str(subfolder))
-    for filename in ["train_stats.csv", "trainlog.txt", "parameters.json"]:
+    for filename in [TRAIN_STATS, TRAIN_LOG, PARAMETERS_JSON]:
         os.rename(filename, str(subfolder / filename))
-
-
-def eval_untrained_model():
-    img_size = 128
-    item_depth = 3
-    ds = dataset.TrophallaxisDataset(item_depth=item_depth, random_crop_amplitude=0, 
-                                     clahe=False, random_rotation_max=0, drop_frames_around_trophallaxis=0)
-    trainset = ds.trainset()
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
-                                              shuffle=True, num_workers=2)
-    testset = ds.testset()
-    testloader = torch.utils.data.DataLoader(testset, batch_size=64,
-                                             shuffle=False, num_workers=2)
-    model = resnet.resnet18(image_size=img_size, in_channels=item_depth)
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-
-    model.cuda()
-    return _run_epoch(model, optimizer, criterion, testloader, training=False)
-

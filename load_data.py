@@ -1,6 +1,6 @@
 import math
 import json
-from typing import List, Dict
+from typing import Dict
 import warnings
 import numpy as np
 import pandas as pd
@@ -8,7 +8,7 @@ import matplotlib
 import seaborn as sns
 import psycopg2
 import numba
-import bb_binary
+from bb_binary import FrameContainer
 
 
 class Event():
@@ -16,7 +16,8 @@ class Event():
     Attributes:
         observations: of frames including padding
         trophallaxis_observed: True if at least one frame shows trophallaxis
-        begin_frame_idx, end_frame_idx: begin and end of trophallaxis, WITHOUT padding
+        begin_frame_idx, end_frame_idx: begin and end of trophallaxis,
+            WITHOUT padding.
     """
     track_ids = (None, None)
     detection_ids = (None, None)
@@ -68,7 +69,9 @@ class Observation():
         return "{}_{}_{}_{}_{}_{}_{}_{}".format(self.frame_id,
                                                 *self.xs,
                                                 *self.ys,
-                                                *[int((math.degrees(o) + 360) % 360) for o in self.orientations],
+                                                *[int((math.degrees(o) + 360)
+                                                      % 360)
+                                                  for o in self.orientations],
                                                 self.label)
 
 
@@ -92,18 +95,20 @@ def setSnsStyle(style: str):
 
 
 def connect():
-    return psycopg2.connect("dbname='beesbook' user='reader' host='localhost' password='reader'")
+    return psycopg2.connect("dbname='beesbook' user='reader' host='localhost' "
+                            "password='reader'")
 
 
 def load_ground_truth_events(csv_path: str, padding: int) -> [Event]:
-    """ 
+    """
     Return a list of Event objects, one Event per row in the csv file.
     Args:
-        csv_path: path to the ground truth data. required columns are: 
-            track_id_combination, bee_a_detection_ids,bee_b_detection_ids, 
-            human_decidable_interaction, trophallaxis_observed, 
+        csv_path: path to the ground truth data. required columns are:
+            track_id_combination, bee_a_detection_ids,bee_b_detection_ids,
+            human_decidable_interaction, trophallaxis_observed,
             trophallaxis_start_frame_nr, trophallaxis_end_frame_nr
-        padding: set to a positive value to add extra frames at the beginning and end of each event.
+        padding: set to a positive value to add extra frames at the beginning
+            and end of each event.
     """
     setSnsStyle("ticks")
 
@@ -119,7 +124,7 @@ def load_ground_truth_events(csv_path: str, padding: int) -> [Event]:
     frame_fc_map = get_frame_container_info_for_frames(frame_ids=all_frame_ids)
     print("Unique frame ids: {}".format(len(all_frame_ids)))
 
-    map_additional_data_to_events(frame_to_fc_map=get_frame_to_fc_path_dict(frame_fc_map), 
+    map_additional_data_to_events(frame_to_fc_map=get_frame_to_fc_path_dict(frame_fc_map),
                                   events=gt_events)
     map_bee_ids(gt_events)
     map_observations(padding=padding, events=gt_events)
@@ -216,7 +221,8 @@ def map_bee_ids(events: [Event]):
 def prepare_get_bee_id():
     with connect() as db:
         db.cursor().execute(
-            "PREPARE get_bee_id AS SELECT bee_id FROM bb_detections WHERE frame_id = $1 AND detection_idx = $2;")
+            "PREPARE get_bee_id AS SELECT bee_id FROM bb_detections "
+            "WHERE frame_id = $1 AND detection_idx = $2;")
 
 
 def get_bee_id(frame_id: int, detection_idx: int, prepared: bool):
@@ -251,7 +257,8 @@ def get_frame_container_info_for_frames(frame_ids) -> pd.DataFrame:
             frame_container_to_frames[fc_id].append(frame_id)
 
         cur.execute(
-            "SELECT id, fc_id, fc_path, video_name FROM plotter_framecontainer WHERE id IN %s;",
+            "SELECT id, fc_id, fc_path, video_name "
+            "FROM plotter_framecontainer WHERE id IN %s;",
             (tuple(frame_container_to_frames.keys()),))
 
         frame_to_fc_map = []
@@ -259,7 +266,8 @@ def get_frame_container_info_for_frames(frame_ids) -> pd.DataFrame:
             for frame_id in frame_container_to_frames[ID]:
                 frame_to_fc_map.append((frame_id, fc_id, fc_path, video_name))
         frame_fc_map = pd.DataFrame(frame_to_fc_map,
-                                    columns=("frame_id", "fc_id", "fc_path", "video_name"))
+                                    columns=("frame_id", "fc_id", "fc_path",
+                                             "video_name"))
         return frame_fc_map
 
 
@@ -268,7 +276,7 @@ def get_frame_to_fc_path_dict(frame_fc_map: pd.DataFrame) -> Dict:
     for unique_fc in np.unique(frame_fc_map.fc_path.values):
         with open(unique_fc, 'rb') as f:
             # TODO replace bb_binary
-            fc_files[unique_fc] = bb_binary.FrameContainer.read(f, traversal_limit_in_words=2**63)
+            fc_files[unique_fc] = FrameContainer.read(f, traversal_limit_in_words=2**63)
 
     frame_to_fc_map = {}
     for fc_path, df in frame_fc_map.groupby("fc_path"):
@@ -284,10 +292,11 @@ def split_detection_id(detection_id: str) -> (int, int):
     return frame_id, detection_idx
 
 
-def get_all_frames(frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), frame_padding_length: int = None) -> [Observation]:
-    frames = get_neighbour_frames(frame_id1=frame_id_begin, 
-                                  frame_id2=frame_id_end, 
-                                  n_frames=frame_padding_length, 
+def get_all_frames(frame_id_begin: int, frame_id_end: int, bee_ids: (int, int),
+                   frame_padding_length: int = None) -> [Observation]:
+    frames = get_neighbour_frames(frame_id1=frame_id_begin,
+                                  frame_id2=frame_id_end,
+                                  n_frames=frame_padding_length,
                                   mode='around')
     frame_ids = [frame_id for (timestamp, frame_id, fc_id) in frames]
     interpolated = interpolate(frame_ids, bee_ids)
@@ -299,13 +308,15 @@ def get_all_frames(frame_id_begin: int, frame_id_end: int, bee_ids: (int, int), 
     return [Observation(frame_id=frame_ids[i],
                         xs=(interpolated[i][0], interpolated[i][3]),
                         ys=(interpolated[i][1], interpolated[i][4]),
-                        orientations=(interpolated[i][2], interpolated[i][5])) for i in range(len(frame_ids))]
+                        orientations=(interpolated[i][2], interpolated[i][5]))
+            for i in range(len(frame_ids))]
 
 def interpolate(frame_ids, bee_ids) -> np.ndarray:
     results = np.empty((len(frame_ids), 6), dtype=np.float32)
     results[:, :] = np.nan
     for i, frame_id in enumerate(frame_ids):
-        detections = get_position_and_orientation(frame_id=frame_id, bee_ids=bee_ids)
+        detections = get_position_and_orientation(frame_id=frame_id,
+                                                  bee_ids=bee_ids)
         for d in detections:
             if d[0] == bee_ids[0]:
                 results[i, :3] = [d[1], d[2], d[3]]
@@ -322,7 +333,9 @@ def interpolate(frame_ids, bee_ids) -> np.ndarray:
 def get_position_and_orientation(frame_id: int, bee_ids: (int, int)):
     with connect() as db:
         cursor = db.cursor()
-        cursor.execute("SELECT bee_id, x_pos, y_pos, orientation FROM bb_detections WHERE frame_id = %s and (bee_id = %s or bee_id = %s)",
+        cursor.execute("SELECT bee_id, x_pos, y_pos, orientation "
+                       "FROM bb_detections WHERE frame_id = %s "
+                       "and (bee_id = %s or bee_id = %s)",
                        (frame_id, *bee_ids))
         return list(cursor)
 
@@ -331,11 +344,13 @@ def get_timestamp(frame_id: int) -> int:
     with connect() as db:
         cur = db.cursor()
         cur.execute(
-            "SELECT timestamp FROM plotter_frame where frame_id = %s LIMIT 1", (frame_id,))
+            "SELECT timestamp FROM plotter_frame where frame_id = %s LIMIT 1",
+            (frame_id,))
         return cur.fetchone()[0]
 
 
-def get_neighbour_frames(frame_id1, frame_id2, n_frames=None, seconds=None, mode: str = 'around') -> [(int, int, int)]:
+def get_neighbour_frames(frame_id1, frame_id2, n_frames=None, seconds=None,
+                         mode: str = 'around') -> [(int, int, int)]:
     with connect() as db:
         seconds = seconds or (n_frames / 3 if n_frames else 5.0)
         timestamp1 = get_timestamp(frame_id1)
@@ -353,16 +368,19 @@ def get_neighbour_frames(frame_id1, frame_id2, n_frames=None, seconds=None, mode
 
         cursor = db.cursor()
         cursor.execute(
-            "SELECT fc_id FROM plotter_frame WHERE frame_id = %s LIMIT 1", (frame_id1,))
+            "SELECT fc_id FROM plotter_frame WHERE frame_id = %s LIMIT 1",
+            (frame_id1,))
         fc_id = cursor.fetchone()[0]
 
         cursor.execute(
-            "SELECT timestamp, frame_id, fc_id FROM plotter_frame WHERE timestamp >= %s AND timestamp <= %s", (ts1, ts2))
+            "SELECT timestamp, frame_id, fc_id FROM plotter_frame "
+            "WHERE timestamp >= %s AND timestamp <= %s", (ts1, ts2))
         results = list(cursor)
         containers = {fc_id for (_, _, fc_id) in results}
 
         cursor.execute("PREPARE fetch_container AS "
-                       "SELECT CAST(SUBSTR(video_name, 5, 1) AS INT) FROM plotter_framecontainer "
+                       "SELECT CAST(SUBSTR(video_name, 5, 1) AS INT) "
+                       "FROM plotter_framecontainer "
                        "WHERE id = $1")
         cursor.execute("EXECUTE fetch_container (%s)", (fc_id,))
         target_cam = cursor.fetchone()[0]
