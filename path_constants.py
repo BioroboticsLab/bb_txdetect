@@ -2,7 +2,12 @@
 from pathlib import Path
 
 _BASE_FOLDER = Path().home() / "txdetect_data"
+if not _BASE_FOLDER.exists():
+    _BASE_FOLDER.mkdir()
+
 _IMAGES = Path(_BASE_FOLDER) / "images"
+if not _IMAGES.exists():
+    _IMAGES.mkdir()
 
 ARCHIVE_PATH = _BASE_FOLDER / "saved_models"
 if not ARCHIVE_PATH.exists():

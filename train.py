@@ -14,10 +14,10 @@ from torch.autograd import Variable
 from sklearn.metrics import f1_score, confusion_matrix
 from tqdm import tqdm
 
-import dataset
-import smaller_net
-from path_constants import (TRAIN_LOG, MODEL_PATH, TRAIN_STATS,
-                            ARCHIVE_PATH, PARAMETERS_JSON)
+from txdetect import dataset
+from txdetect import smaller_net
+from txdetect.path_constants import (TRAIN_LOG, MODEL_PATH, TRAIN_STATS,
+                                     ARCHIVE_PATH, PARAMETERS_JSON)
 
 
 def _run_epoch(model, optimizer, criterion, loader, training: bool):
