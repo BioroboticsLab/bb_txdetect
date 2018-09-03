@@ -6,16 +6,7 @@ core
 *.png
 *.npy
 __pycache__/
-images/
-images_*/
-data/
-saved_models/
-saved_model_*
-best_model
 *.csv
-candidates*/
-validation_by_confidence/
-parameters.json
 
 
 # Created by https://www.gitignore.io/api/vim
