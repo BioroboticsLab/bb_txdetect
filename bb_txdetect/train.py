@@ -225,4 +225,5 @@ def archive(date: str):
     subfolder.mkdir()
 
     for filename in [TRAIN_STATS, TRAIN_LOG, PARAMETERS_JSON]:
-        os.rename(filename, str(subfolder / filename))
+        assert Path(filename).exists
+        os.rename(filename, str(subfolder / Path(filename).name))
