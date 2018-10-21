@@ -181,7 +181,7 @@ def train(seed, rca, item_depth,
     params.num_channels = item_depth
     params.seed = seed
     params.rca = rca
-    params.version = 2.3
+    params.version = 2.5
     params.maxangle = random_rotation_max
     params.drop = "all" if drop_frames_around_trophallaxis else 0
     params.model_parameters = model_parameters

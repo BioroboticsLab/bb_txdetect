@@ -12,9 +12,10 @@ from sklearn.model_selection import train_test_split
 import torch
 from torch.utils.data.dataset import Dataset, Subset
 from torchvision import transforms
+from imgaug import augmenters as iaa
 
 from bb_txdetect.path_constants import (TRAIN_LOG, IMG_FOLDER, CLAHE, INVERT,
-                                     LABEL_YES, LABEL_NO, LABEL_UNKNOWN)
+                                        LABEL_YES, LABEL_NO, LABEL_UNKNOWN)
 
 
 class TrophallaxisDataset(Dataset):
@@ -26,22 +27,18 @@ class TrophallaxisDataset(Dataset):
                  random_crop_amplitude: int, clahe: bool,
                  random_rotation_max: int,
                  drop_frames_around_trophallaxis: bool,
-                 transform=None, log_path=TRAIN_LOG,
+                 log_path=TRAIN_LOG,
                  always_rotate_to_first_bee=False, img_folder=IMG_FOLDER,
                  validation=False):
 
-        trans = []
-        trans.append(transforms.transforms.ToPILImage())
-        trans.append(transforms.RandomRotation(degrees=random_rotation_max))
-        trans.append(transforms.CenterCrop(size=128 + random_crop_amplitude))
-        if random_crop_amplitude > 0:
-            trans.append(transforms.RandomCrop(size=128))
-            trans.append(transforms.CenterCrop(size=128))
-        trans.append(transforms.ToTensor())
-        if transform:
-            self.transformations = transform
-        else:
-            self.transformations = transforms.Compose(trans)
+        self.to_tensor = transforms.Compose([transforms.ToTensor()])
+
+        fixed_crop = (32 - random_crop_amplitude) // 2
+        self.aug_seq = iaa.Sequential([
+            iaa.Affine(rotate=(-random_rotation_max, random_rotation_max)),
+            iaa.Crop(px=(fixed_crop, fixed_crop)),
+            iaa.CropToFixedSize(width=128, height=128),
+        ])
 
         self.always_rotate_to_first_bee = always_rotate_to_first_bee
 
@@ -104,15 +101,10 @@ class TrophallaxisDataset(Dataset):
 
         images = [imread(path) for path in paths]
 
-        try:
-            data = np.dstack(images) if len(images) > 1 else images[0]
-        except ValueError:
-            print("ValueError", index, path)
-            for img in images:
-                print(img.shape, index)
-            raise
+        data = np.dstack(images) if len(images) > 1 else images[0]
 
-        data = self.transformations(data)
+        data = self.aug_seq.augment_image(data)
+        data = self.to_tensor(data)
         return (data, label, path)
 
     def __len__(self):
