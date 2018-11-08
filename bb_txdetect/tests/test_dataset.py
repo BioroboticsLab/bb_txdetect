@@ -22,20 +22,26 @@ class PathsTestCase(unittest.TestCase):
                 self.assertEqual(dataset._folder_index(path=path), 586)
 
     def test_load_data(self):
-        item_depth = 3
-        clahe = False
-        rca = 8
+        for i in [1, 3, 5]:
+            with self.subTest(i=i):
+                item_depth = i
+                clahe = False
+                rca = 8
 
-        dataset = TrophallaxisDataset(item_depth=item_depth,
-                                      random_crop_amplitude=rca, clahe=clahe,
-                                      random_rotation_max=0,
-                                      drop_frames_around_trophallaxis=0)
-        trainset = dataset.trainset()
-        testset = dataset.testset()
-        testloader = torch.utils.data.DataLoader(testset, batch_size=64,
-                                                 shuffle=False, num_workers=2)
+                dataset = TrophallaxisDataset(item_depth=item_depth,
+                                              random_crop_amplitude=rca,
+                                              clahe=clahe,
+                                              random_rotation_max=0,
+                                              drop_frames_around_trophallaxis=0)
+                trainset = dataset.trainset()
+                testset = dataset.testset()
+                testloader = torch.utils.data.DataLoader(testset,
+                                                         batch_size=64,
+                                                         shuffle=False,
+                                                         num_workers=2)
 
-        self.assertFalse(dataset.subset_overlap(train=trainset, test=testset))
+                self.assertFalse(dataset.subset_overlap(train=trainset,
+                                                        test=testset))
 
-        for data in testloader:
-            pass
+                for data in testloader:
+                    pass

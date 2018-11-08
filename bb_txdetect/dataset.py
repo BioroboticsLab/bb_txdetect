@@ -101,7 +101,11 @@ class TrophallaxisDataset(Dataset):
 
         images = [imread(path) for path in paths]
 
-        data = np.dstack(images) if len(images) > 1 else images[0]
+        if len(images) > 1:
+            data = np.dstack(images)
+        else:
+            data = images[0]
+            data = data.reshape(data.shape[0], data.shape[1], 1)
 
         data = self.aug_seq.augment_image(data)
         data = self.to_tensor(data)
