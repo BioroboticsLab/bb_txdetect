@@ -1,8 +1,9 @@
 import json
 from warnings import warn
-import matplotlib.pyplot as plt
 from glob import glob
 from pathlib import Path
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from bb_txdetect.path_constants import ARCHIVE_PATH, TRAIN_STATS
 
@@ -34,6 +35,17 @@ class Experiment(object):
         self.false_predictions_test = [(line[4][1] + line[4][2])
                                        / sum(line[4]) for line in stats]
 
+        conf_mats = np.array([line[-1] for line in stats[-3:]])
+        tn, fn, fp, tp = [conf_mats[:, i].sum() / 3
+                          for i in range(len(conf_mats[0]))]
+        n = tn + fp
+        p = tp + fn
+        self.accuracy = (tp + tn) / (p + n)
+        self.sensitivity = tp / p
+        self.specificity = tn / n
+        self.ppv = tp / (tp + fp)
+        self.npv = tn / (tn + fn)
+
     def plot(self):
         f, axarr = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
         axarr[0].set_title("f1 score")
@@ -61,7 +73,9 @@ def get_dataframe():
     experiments = _load_experiments()
     data = {"date": [], "net": [], "channels": [], "best epoch": [],
             "end score": [], "end score train": [], "version": [], "rca": [],
-            "drop": [], "seed": [], "maxangle": [], "model_parameters": []}
+            "drop": [], "seed": [], "maxangle": [], "model_parameters": [],
+            "rotations": [], "acc": [], "sens": [], "spec": [], "ppv": [],
+            "npv": [], "clahe": []}
     for e in experiments:
         data["best epoch"].append(e.best_epoch)
         data["end score"].append(e.end_score_test)
@@ -72,15 +86,28 @@ def get_dataframe():
         data["version"].append(e.parameters["version"])
         data["rca"].append(e.parameters["rca"])
         data["drop"].append(e.parameters["drop"])
+        data["acc"].append(e.accuracy)
+        data["sens"].append(e.sensitivity)
+        data["spec"].append(e.specificity)
+        data["ppv"].append(e.ppv)
+        data["npv"].append(e.npv)
+        data["maxangle"].append(e.parameters["maxangle"])
+        try:
+            data["clahe"].append(e.parameters["clahe"])
+        except KeyError:
+            data["clahe"].append(False)
         try:
             data["seed"].append(e.parameters["seed"])
         except KeyError:
             data["seed"].append(-1)
-        data["maxangle"].append(e.parameters["maxangle"])
         try:
             data["model_parameters"].append(e.parameters["model_parameters"])
         except KeyError:
             data["model_parameters"].append([])
+        try:
+            data["rotations"].append(e.parameters["rotations"])
+        except KeyError:
+            data["rotations"].append(2)
     return pd.DataFrame(data)
 
 

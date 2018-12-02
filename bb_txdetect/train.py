@@ -118,7 +118,8 @@ def train(seed, rca, item_depth,
           auto_archive=True, clahe=False, random_rotation_max=0,
           model_parameters=None,
           num_epochs=50, batch_size=64,
-          network=None, save_last_model=False):
+          network=None, save_last_model=False,
+          always_rotate_to_first_bee=False):
     """
     train a network, save stats, maybe save the model.
     Args:
@@ -144,7 +145,8 @@ def train(seed, rca, item_depth,
                                            random_crop_amplitude=rca,
                                            clahe=clahe,
                                            drop_frames_around_trophallaxis=drop_frames_around_trophallaxis,
-                                           random_rotation_max=random_rotation_max).trainset(seed=seed)
+                                           random_rotation_max=random_rotation_max,
+                                           always_rotate_to_first_bee=always_rotate_to_first_bee).trainset(seed=seed)
 
     testset = dataset.TrophallaxisDataset(item_depth=item_depth,
                                           random_crop_amplitude=0,
@@ -189,6 +191,7 @@ def train(seed, rca, item_depth,
     params.clahe = clahe
     params.criterion = type(criterion).__name__
     params.optimizer = type(optimizer).__name__
+    params.rotations = 1 if always_rotate_to_first_bee else 2
 
     params.write_file()
 
